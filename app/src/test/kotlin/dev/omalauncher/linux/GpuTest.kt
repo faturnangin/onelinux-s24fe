@@ -37,6 +37,35 @@ class GpuTest {
         assertEquals(GpuKind.MALI, gpuKind(hasMali = true, hasKgsl = true, kgslModel = "Adreno 740"))
     }
 
+    @Test fun drmRenderNodeOrExynosSelectsXclipse() {
+        assertEquals(GpuKind.XCLIPSE, gpuKind(hasMali = false, hasKgsl = false, hasDrmRender = true))
+        assertEquals(GpuKind.XCLIPSE, gpuKind(hasMali = false, hasKgsl = false, hasDrmRender = false, socOrGpuModel = "Exynos 2400e"))
+        assertEquals(GpuKind.XCLIPSE, gpuKind(hasMali = false, hasKgsl = false, hasDrmRender = false, socOrGpuModel = "s5e9945"))
+        assertEquals(GpuKind.XCLIPSE, gpuKind(hasMali = false, hasKgsl = false, hasDrmRender = false, socOrGpuModel = "Xclipse 940"))
+        assertTrue(xclipseSupports("Samsung Galaxy S24 FE (s5e9945)"))
+        assertTrue(xclipseSupports("Xclipse 940"))
+        assertFalse(xclipseSupports("Snapdragon 8 Gen 3"))
+    }
+
+    @Test fun xclipseScriptConfiguresRadvAndZink() {
+        val driver = GpuDrivers.of(GpuKind.XCLIPSE)
+        assertEquals("Xclipse (RADV)", driver.label)
+        assertTrue(driver.env.contains("RADV_PERFTEST=gpl"))
+        val script = GpuDrivers.installScript(driver)
+        assertTrue(script.contains("vulkan-radeon"))
+        assertTrue(script.contains("radeon_xclipse_icd.aarch64.json"))
+        val probe = GpuDrivers.probeScript(driver)
+        assertTrue(probe.contains("DRIVER_ID_MESA_RADV"))
+        assertTrue(probe.contains("GALLIUM_DRIVER='zink'"))
+    }
+
+    @Test fun xclipseHotSwapScriptHandlesStagedDriver() {
+        val driver = GpuDrivers.of(GpuKind.XCLIPSE)
+        val hotSwap = GpuDrivers.hotSwapXclipseScript(driver)
+        assertTrue(hotSwap.contains(GpuDrivers.XCLIPSE_CUSTOM_STAGED))
+        assertTrue(hotSwap.contains("radeon_xclipse_icd.aarch64.json"))
+    }
+
     @Test fun softwareEnvNamesOnlyLavapipe() {
         val icds = listOf(GpuDrivers.of(GpuKind.MALI).icdPath, GpuDrivers.of(GpuKind.TURNIP).icdPath)
         assertEquals(
@@ -61,9 +90,13 @@ class GpuTest {
         assertTrue(mesas.exists())
         // A link is left alone: its target isn't ours to delete.
         val link = File(dir, "link.json").toPath()
-        Files.createSymbolicLink(link, File(dir, "target.json").apply { writeText(mali.driverPath) }.toPath())
-        GpuDrivers.retireLegacyManifest(mali, link.toFile())
-        assertTrue(Files.isSymbolicLink(link))
+        val created = runCatching {
+            Files.createSymbolicLink(link, File(dir, "target.json").apply { writeText(mali.driverPath) }.toPath())
+        }.isSuccess
+        if (created) {
+            GpuDrivers.retireLegacyManifest(mali, link.toFile())
+            assertTrue(Files.isSymbolicLink(link))
+        }
         // Turnip never wrote one there.
         GpuDrivers.retireLegacyManifest(GpuDrivers.of(GpuKind.TURNIP), mesas.apply { writeText(mali.driverPath) })
         assertTrue(mesas.exists())

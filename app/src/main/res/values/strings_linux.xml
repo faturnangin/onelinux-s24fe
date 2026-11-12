@@ -166,6 +166,11 @@
     <string name="linux_retry">retry</string>
     <string name="linux_gpu_turn_off">turn off</string>
     <string name="linux_gpu_turn_on">turn on</string>
+    <string name="linux_gpu_import">import driver (.zip/.so)</string>
+    <string name="linux_gpu_github">update from github</string>
+    <string name="linux_gpu_github_title">update radv-xclipse driver</string>
+    <string name="linux_gpu_github_hint">GitHub repository or direct release asset URL (.zip/.so)</string>
+    <string name="linux_gpu_custom_active">custom driver: %1$s</string>
 
     <!-- The ongoing notification while Linux runs. -->
     <string name="linux_notification_channel">Linux session</string>

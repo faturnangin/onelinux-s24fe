@@ -13,6 +13,12 @@ const val VOICE_COMMAND = "omarchy-voice"
 /** Exec of the Editor entry and Linux's $EDITOR; the launcher's own editor (see OpenBridge's shim). */
 const val EDIT_COMMAND = "omarchy-edit"
 
+/** Launches a full Niri + Noctalia Shell desktop session nested in the launcher's Wayland server. */
+const val NOCTALIA_DESKTOP_COMMAND = "start-noctalia-desktop"
+
+/** Launches Chromium with Wayland + Zink + RADV-Xclipse hardware acceleration & WebGL 2.0 flags. */
+const val CHROMIUM_XCLIPSE_COMMAND = "chromium-xclipse"
+
 private fun entry(
     name: String,
     exec: String,
@@ -31,10 +37,10 @@ private fun entry(
 private val CURATED =
     mapOf(
         "foot" to entry("Terminal", "foot", terminal = false, icon = "foot"),
-        "btop" to entry("btop", "btop", icon = "btop"),
-        "omarchy-files" to entry("Files", FILES_COMMAND, terminal = false, icon = bundledIcon("files")),
+        "chromium" to entry("Chromium", CHROMIUM_XCLIPSE_COMMAND, terminal = false, icon = "chromium"),
+        "btop" to entry("btop (Monitor)", "btop", terminal = true, icon = "btop"),
         "micro" to entry("Editor", EDIT_COMMAND, terminal = false, icon = bundledIcon("editor")),
-        "omarchy-voice" to entry("Voice", VOICE_COMMAND, terminal = false, icon = bundledIcon("voice")),
+        "omarchy-files" to entry("Files", FILES_COMMAND, terminal = false, icon = bundledIcon("files")),
         "cliamp" to entry("Cliamp", "cliamp", icon = bundledIcon("cliamp")),
     )
 
@@ -43,10 +49,10 @@ private val CURATED =
  * pulseaudio dependency), foot's server/client pair, and keyboard-only editors.
  * They stay installed; the drawer just doesn't list them.
  */
-private val HIDDEN = listOf("avahi-discover", "bssh", "bvnc", "footclient", "foot-server", "vim", "nvim", "yazi")
+private val HIDDEN = listOf("avahi-discover", "bssh", "bvnc", "footclient", "foot-server", "vim", "nvim", "yazi", "chromium-xclipse", "agy")
 
 /** The curated and hiding entries; ones the user edited are left alone. */
 fun defaultApps(applications: File): List<Managed> {
     val hidden = HIDDEN.associateWith { "[Desktop Entry]\nType=Application\nName=$it\nNoDisplay=true\n" }
-    return (CURATED + hidden).map { (id, content) -> Managed.text(File(applications, "$id.desktop"), Policy.Seeded) { content } }
+    return (CURATED + hidden).map { (id, content) -> Managed.text(File(applications, "$id.desktop"), Policy.Owned) { content } }
 }

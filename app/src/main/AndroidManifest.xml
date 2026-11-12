@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Speech input for the agent prompt bar; only recognized text reaches Linux. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -26,6 +27,7 @@
 
     <!-- Uninstall from the app drawer's long-press menu (ACTION_DELETE). -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
 
     <uses-feature
         android:name="android.software.live_wallpaper"
@@ -64,6 +66,7 @@
         android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:theme="@style/Theme.Omalauncher"
         android:usesCleartextTraffic="true">
@@ -72,7 +75,6 @@
             android:name=".MainActivity"
             android:clearTaskOnLaunch="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode"
-            android:excludeFromRecents="true"
             android:exported="true"
             android:launchMode="singleTask"
             android:resizeableActivity="true"
@@ -80,9 +82,7 @@
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- A widget shared as a link or QR code: https://simonschubert.github.io/omarchy-widgets/w#owl1.<data> (widgets/market/Share.kt). -->
             <intent-filter android:autoVerify="true">
@@ -97,7 +97,6 @@
         <activity
             android:name=".SpeakNowActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode"
-            android:excludeFromRecents="true"
             android:exported="false"
             android:taskAffinity=""
             android:theme="@style/Theme.Omalauncher.Dialog" />
@@ -105,7 +104,6 @@
         <activity
             android:name=".PickActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode"
-            android:excludeFromRecents="true"
             android:exported="false"
             android:taskAffinity=""
             android:theme="@style/Theme.Omalauncher.Dialog" />
@@ -115,7 +113,6 @@
         <activity
             android:name=".PinShortcutActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode"
-            android:excludeFromRecents="true"
             android:exported="false"
             android:noHistory="true"
             android:taskAffinity=""
@@ -140,13 +137,29 @@
         <activity-alias
             android:name=".TerminalWindow"
             android:exported="false"
+            android:icon="@drawable/terminal"
             android:label="@string/activity_terminal"
             android:targetActivity=".LinuxWindowActivity" />
 
         <activity-alias
             android:name=".BtopWindow"
             android:exported="false"
+            android:icon="@drawable/btop"
             android:label="btop"
+            android:targetActivity=".LinuxWindowActivity" />
+
+        <activity-alias
+            android:name=".ChromiumWindow"
+            android:exported="false"
+            android:icon="@drawable/chromium"
+            android:label="Chromium"
+            android:targetActivity=".LinuxWindowActivity" />
+
+        <activity-alias
+            android:name=".AntigravityIdeWindow"
+            android:exported="false"
+            android:icon="@drawable/antigravity_ide"
+            android:label="Antigravity IDE"
             android:targetActivity=".LinuxWindowActivity" />
 
         <!-- And each coding agent (Agent.windowAlias), with its logo: Recents shows the activity's icon too. -->
@@ -358,33 +371,9 @@
         </provider>
 
         <service
-            android:name=".theme.OmarchyWallpaperService"
-            android:exported="true"
-            android:label="@string/wallpaper_label"
-            android:permission="android.permission.BIND_WALLPAPER">
-            <intent-filter>
-                <action android:name="android.service.wallpaper.WallpaperService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.service.wallpaper"
-                android:resource="@xml/wallpaper" />
-        </service>
-
-        <!-- Notification access lets widgets show and control what's playing (android.media) and list notifications (android.notifications). -->
-        <service
-            android:name=".widgets.runtime.MediaListener"
-            android:exported="true"
-            android:label="@string/notification_listener"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
-
-        <service
             android:name=".LinuxService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|microphone">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Runs a user-started Linux environment and its display server" />

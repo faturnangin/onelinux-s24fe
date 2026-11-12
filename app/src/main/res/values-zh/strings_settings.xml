@@ -55,6 +55,8 @@
     <string name="permissions_notifications_uses">linux 运行时的状态、发送通知的小组件</string>
     <string name="permissions_notification_access">通知使用权</string>
     <string name="permissions_notification_access_uses">通知圆点，以及小组件用的正在播放内容和勿扰模式</string>
+    <string name="permissions_all_files">所有文件访问权限</string>
+    <string name="permissions_all_files_uses">在 /sdcard、/root/Android、/root/Downloads 和 /root/Documents 中完整共享存储</string>
 
     <string name="settings_android">android 设置</string>
     <string name="settings_android_subtitle">手机的系统设置</string>

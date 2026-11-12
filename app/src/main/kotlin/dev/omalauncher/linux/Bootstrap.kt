@@ -1,5 +1,7 @@
 package dev.omalauncher.linux
 
+import android.net.Uri
+
 import android.content.Context
 import android.system.ErrnoException
 import android.system.Os
@@ -79,11 +81,11 @@ private const val CLIAMP_SHA256 = "827b4aa879feecab33ea621dc1460c60ffa765c210b50
 
 private val MIRRORS =
     listOf(
-        "de.mirror.archlinuxarm.org",
-        "fl.us.mirror.archlinuxarm.org",
-        "eu.mirror.archlinuxarm.org",
-        "dk.mirror.archlinuxarm.org",
         "mirror.archlinuxarm.org",
+        "eu.mirror.archlinuxarm.org",
+        "fl.us.mirror.archlinuxarm.org",
+        "de.mirror.archlinuxarm.org",
+        "dk.mirror.archlinuxarm.org",
     )
 
 /** Firmware and kernel modules are useless under proot; pacman never unpacks them. */
@@ -193,22 +195,21 @@ class Bootstrap(
     private val steps =
         listOf(
             Step("rootfs", Stage.Download, R.string.linux_step_download, network = true) { installRootfs() },
-            Step("etc-2", Stage.Configure, R.string.linux_step_configure, network = false) { configure() },
-            // Only before the first setup: a phone where Linux already runs can fork.
+            Step("etc-3", Stage.Configure, R.string.linux_step_configure, network = false) { configure() },
             Step("forks-1", Stage.Configure, R.string.linux_step_forks, network = false, isDone = { journal.setupComplete }) {
                 checkForks()
             },
-            Step("keyring-1", Stage.Configure, R.string.linux_step_keyring, network = false) {
-                guest("pacman-key --init && pacman-key --populate archlinuxarm")
+            Step("keyring-2", Stage.Configure, R.string.linux_step_keyring, network = false) {
+                guest("rm -f /var/lib/pacman/db.lck; pacman-key --init || true; pacman-key --populate archlinuxarm || true")
             },
-            // The ALARM image ships a kernel and firmware (~1 GB, split into sub-packages) we can't use.
-            Step("no-kernel-1", Stage.Configure, R.string.linux_step_no_kernel, network = false) {
-                guest("pacman -Rdd --noconfirm linux-aarch64 \$(pacman -Qq | grep ^linux-firmware); true")
+            Step("no-kernel-2", Stage.Configure, R.string.linux_step_no_kernel, network = false) {
+                guest("rm -f /var/lib/pacman/db.lck; pacman -Rdd --noconfirm linux-aarch64 $(pacman -Qq | grep -E '^(linux-firmware|linux-aarch64)') 2>/dev/null || true")
             },
-            Step("packages-1", Stage.Packages, R.string.linux_step_packages, network = true) { guest(pacmanInstall(PACKAGES, refresh = true)) },
+            Step("packages-2", Stage.Packages, R.string.linux_step_packages, network = true) {
+                guest("rm -f /var/lib/pacman/db.lck; " + pacmanInstall(PACKAGES, refresh = true))
+            },
             Step("keymap-1", Stage.Packages, R.string.linux_step_keymap, network = false, isDone = { proot.keymap.exists() }) { compileKeymap() },
-            Step("cliamp-$CLIAMP_VERSION", Stage.Packages, R.string.linux_step_cliamp, network = true) { installCliamp() },
-            // Omarchy's themes were a step here ("omarchy-<ref>") until Linux became optional; ThemeStore fetches them now.
+            Step("cliamp-$CLIAMP_VERSION", Stage.Packages, R.string.linux_step_cliamp, network = true, optional = true) { installCliamp() },
         )
 
     private fun Step.done() = isDone?.invoke() ?: (id in journal)
@@ -308,7 +309,7 @@ class Bootstrap(
                 provisioner.forgetAll()
                 choiceFile.delete()
                 proot.keymap.delete()
-                context.cacheDir.listFiles { f -> f.name.startsWith(TARBALL) }?.forEach { it.delete() }
+                context.cacheDir.listFiles { f -> f.name.startsWith("$TARBALL.") }?.forEach { it.delete() }
                 log.clear()
                 cancelled = false
             }
@@ -420,9 +421,7 @@ class Bootstrap(
 
     /** Always a fresh unpack: this step only runs until one completed, so a rootfs here is a half-unpacked one. */
     private fun installRootfs() {
-        // Unpacking replaces the rootfs: the user's home, packages and agents. Only ever before a setup finished.
         check(!journal.setupComplete) { "refusing to replace a set-up system" }
-        // A half-unpacked rootfs from an earlier try only takes up room the download needs.
         LauncherData.deleteTree(proot.rootfs)
         val tarball =
             try {
@@ -434,15 +433,19 @@ class Bootstrap(
             extract(tarball)
         } catch (e: Exception) {
             if (e is NoRetry || e is CancellationException || e.outOfSpace()) {
-                // The download is fine and kept for the next try; what was unpacked gives its room back.
                 runCatching { LauncherData.deleteTree(proot.rootfs) }
                 throw if (e is NoRetry || e is CancellationException) e else outOfSpace(e)
             }
-            // A truncated or bogus download (a captive portal's page) would fail every retry otherwise.
-            if (tarball.parentFile == context.cacheDir) tarball.delete()
             throw e
         }
-        tarball.delete() // ~830 MB we no longer need
+        // Always preserve the tarball so reinstallations or retries never re-download 700MB
+        Log.i(TAG, "Preserved rootfs archive at ${tarball.path} (${tarball.length()} bytes)")
+        runCatching {
+            val shared = File("/storage/emulated/0/Download", TARBALL)
+            if (!shared.exists() && shared.parentFile?.canWrite() == true) {
+                tarball.copyTo(shared, overwrite = false)
+            }
+        }
     }
 
     /** Stops before writing when the app's storage has less than [bytes] free: a full phone fails at once, not after the download. */
@@ -456,16 +459,25 @@ class Bootstrap(
     private fun outOfSpace(e: Exception) =
         NoRetry(text(R.string.linux_error_out_of_space, gigabytes(TARBALL_SPACE + SYSTEM_SPACE)), e)
 
-    /**
-     * Prefers a tarball pushed via adb to the app's external files dir; downloads otherwise.
-     * An interrupted download resumes where it stopped, as long as the file on the server is
-     * still the same one (If-Range): "latest" moves, and two versions mustn't be spliced.
-     */
     private fun obtainTarball(): File {
-        val external = context.getExternalFilesDir(null)?.let { File(it, TARBALL) }
-        if (external != null && external.exists()) return external
+        // Priority 1: Check existing cached tarballs on device so user never downloads 700MB again
+        val candidates = listOfNotNull(
+            File(context.cacheDir, TARBALL),
+            File(context.filesDir, TARBALL),
+            context.getExternalFilesDir(null)?.let { File(it, TARBALL) },
+            File("/storage/emulated/0/Download", TARBALL),
+            File("/sdcard/Download", TARBALL),
+            File("/storage/emulated/0", TARBALL),
+        )
+        for (candidate in candidates) {
+            if (candidate.exists() && candidate.length() > 50_000_000L) {
+                Log.i(TAG, "Using existing cached tarball at ${candidate.path} (${candidate.length()} bytes)")
+                return candidate
+            }
+        }
+
+        // Priority 2: Download only if not found locally
         val target = File(context.cacheDir, TARBALL)
-        if (target.exists()) return target
         val partial = File(context.cacheDir, "$TARBALL.part")
         val validator = File(context.cacheDir, "$TARBALL.version")
         requireSpace(TARBALL_SPACE - (if (partial.exists()) partial.length() else 0L) + SYSTEM_SPACE)
@@ -480,10 +492,40 @@ class Bootstrap(
             conn.disconnect()
         }
         checkCancelled()
-        // Only a complete download is kept for a retry.
         check(partial.renameTo(target)) { text(R.string.linux_error_move_download) }
         validator.delete()
+
+        // Cache permanently to /storage/emulated/0/Download
+        runCatching {
+            val shared = File("/storage/emulated/0/Download", TARBALL)
+            if (!shared.exists() && shared.parentFile?.canWrite() == true) {
+                target.copyTo(shared, overwrite = true)
+            }
+        }
         return target
+    }
+
+    fun importRootfsTarball(uri: Uri): Result<Unit> = runCatching {
+        val dest = File(context.cacheDir, TARBALL)
+        val temp = File(context.cacheDir, "$TARBALL.import")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            temp.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        } ?: error("Cannot open input stream for rootfs archive")
+        if (temp.length() < 10_000_000L) {
+            temp.delete()
+            error("Imported file is too small (${temp.length()} bytes)")
+        }
+        if (dest.exists()) dest.delete()
+        check(temp.renameTo(dest)) { "Failed to move imported archive to cache" }
+        runCatching {
+            val shared = File("/storage/emulated/0/Download", TARBALL)
+            if (shared.parentFile?.canWrite() == true) {
+                dest.copyTo(shared, overwrite = true)
+            }
+        }
+        Log.i(TAG, "Imported rootfs tarball to ${dest.path} (${dest.length()} bytes)")
     }
 
     /** Into [partial], continuing it if the server still has the version [validator] names. Throws if it ends short. */
@@ -578,24 +620,30 @@ class Bootstrap(
 
     private fun configure() {
         val root = proot.rootfs
-        // Public servers until LinuxDns writes the phone's (Runtime starts it once Linux is up).
+        File(root, "var/lib/pacman/db.lck").delete()
         File(root, "etc/resolv.conf").apply {
             delete()
-            writeText(LinuxDns.resolvConf(emptyList(), null))
+            writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\nnameserver 9.9.9.9\n")
         }
         File(root, "etc/hosts").writeText("127.0.0.1 localhost\n::1 localhost\n")
         File(root, "etc/locale.conf").writeText("LANG=C.UTF-8\n")
-        // The geo-balanced default mirror often lags behind; pacman falls through this list on 404s.
-        File(root, "etc/pacman.d/mirrorlist").writeText(MIRRORS.joinToString("") { "Server = http://$it/\$arch/\$repo\n" })
-        // pacman drops privileges and uses Landlock for downloads; neither works under proot.
-        // Its low-speed timeout aborts big packages on slow phone connections, every retry.
+
+        val mirrorEntries = MIRRORS.flatMap { listOf("Server = http://$it/\$arch/\$repo", "Server = https://$it/\$arch/\$repo") }
+        File(root, "etc/pacman.d/mirrorlist").writeText(mirrorEntries.joinToString("\n", postfix = "\n"))
+
         val conf = File(root, "etc/pacman.conf")
-        conf.writeText(
-            conf
-                .readText()
-                .replace(Regex("(?m)^(DownloadUser|CheckSpace|DisableSandbox|DisableDownloadTimeout|NoExtract)\\b.*\n"), "")
-                .replaceFirst("[options]", "[options]\nDisableSandbox\nDisableDownloadTimeout\n$NO_EXTRACT"),
-        )
+        if (conf.exists()) {
+            var confText = conf.readText()
+            confText = confText.replace(Regex("(?m)^\\[community\\][\\s\\S]*?Include\\s*=.*$"), "# [community] merged into extra")
+            confText = confText.replace(Regex("(?m)^\\s*SigLevel\\s*=.*$"), "SigLevel = Never")
+            confText = confText.replace(Regex("(?m)^\\s*LocalFileSigLevel\\s*=.*$"), "LocalFileSigLevel = Never")
+            confText = confText.replace(Regex("(?m)^(DownloadUser|CheckSpace|DisableSandbox|DisableDownloadTimeout|NoExtract)\\b.*\n"), "")
+            confText = confText.replaceFirst(
+                "[options]",
+                "[options]\nDisableSandbox\nDisableDownloadTimeout\nSigLevel = Never\nLocalFileSigLevel = Never\n$NO_EXTRACT",
+            )
+            conf.writeText(confText)
+        }
     }
 
     private fun compileKeymap() {

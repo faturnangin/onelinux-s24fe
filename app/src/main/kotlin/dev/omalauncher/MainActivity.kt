@@ -36,7 +36,7 @@ import dev.omalauncher.ui.LauncherStyle
 import dev.omalauncher.ui.SystemBarsEffect
 import dev.omalauncher.ui.applySystemBars
 import dev.omalauncher.ui.showStatusBar
-import dev.omalauncher.ui.LauncherRoot
+import dev.omalauncher.ui.OneUiMainScreen
 import dev.omalauncher.ui.LauncherState
 import dev.omalauncher.ui.PromptRequest
 import dev.omalauncher.widgets.market.Share
@@ -66,34 +66,15 @@ class MainActivity : ComponentActivity() {
         runtime.start()
         state.onSettings = { page, homePage -> runtime.openSettings(page, homePage) }
         setContent {
-            KeyIndicated { LauncherRoot(runtime, state) }
+            OneUiMainScreen(runtime)
             SystemBarsEffect(this@MainActivity)
-            // A face whose statusBar is false takes the status bar's room too.
-            val fullScreen by remember { derivedStateOf { state.fullScreen && runtime.widgets.openScreen == null } }
-            val statusBar = LauncherStyle.style[Style.STATUS_BAR_SHOWN] && !fullScreen
-            LaunchedEffect(statusBar) { showStatusBar(this@MainActivity, statusBar) }
         }
         handleDebugExec(intent)
         handleSharedWidget(intent)
-        // Asked on arriving at the home screen, not over the welcome screen of a fresh install,
-        // and once nothing else is in front: not over the notification permission dialog that
-        // opting into Linux there brings up.
-        lifecycleScope.launch {
-            snapshotFlow { runtime.launcherReady }.first { it }
-            withResumed { requestHomeRole() }
-        }
     }
 
-    /** Asks once to become the default home app; Android shows its own chooser. */
-    private fun requestHomeRole() {
-        val roles = getSystemService(RoleManager::class.java)
-        if (!roles.isRoleAvailable(RoleManager.ROLE_HOME) || roles.isRoleHeld(RoleManager.ROLE_HOME)) return
-        val prefs = LauncherData.prefs(this)
-        if (prefs.getBoolean("home_role_asked", false)) return
-        prefs.edit().putBoolean("home_role_asked", true).apply()
-        @Suppress("DEPRECATION")
-        startActivityForResult(roles.createRequestRoleIntent(RoleManager.ROLE_HOME), 1)
-    }
+    /** Disabled: runs as a standalone One UI folder hub app without replacing Samsung One UI Home. */
+    private fun requestHomeRole() = Unit
 
     /**
      * Debug builds: `adb shell am start -n dev.omalauncher/.MainActivity --es exec foot`,

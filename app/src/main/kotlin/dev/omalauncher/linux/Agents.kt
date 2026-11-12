@@ -35,9 +35,10 @@ data class Agent(
     val windowAlias get() = bin.split('-').joinToString("") { it.replaceFirstChar(Char::uppercase) } + "Window"
 }
 
-/** Omarchy's agent list (omarchy-default-agent), limited to ones mise can install on arm64. */
+/** Omarchy's agent list (omarchy-default-agent), limited to ones mise can install on arm64. Antigravity CLI is first by default. */
 val AGENTS =
     listOf(
+        Agent("agy", "Antigravity", R.string.linux_agent_antigravity, "antigravity-cli"),
         Agent("claude", "Claude Code", R.string.linux_agent_claude, "claude"),
         // mise installs OpenCode 2 from npm (@opencode/cli).
         Agent("opencode", "OpenCode", R.string.linux_agent_opencode, "opencode", node = true),
@@ -46,7 +47,6 @@ val AGENTS =
         Agent("copilot", "GitHub Copilot", R.string.linux_agent_copilot, "copilot"),
         Agent("crush", "Crush", R.string.linux_agent_crush, "crush"),
         Agent("cursor-agent", "Cursor CLI", R.string.linux_agent_cursor, "cursor-agent"),
-        Agent("agy", "Antigravity", R.string.linux_agent_antigravity, "antigravity-cli"),
         Agent("pi", "Pi", R.string.linux_agent_pi, "pi"),
         Agent("omp", "Oh My Pi", R.string.linux_agent_omp, "github:can1357/oh-my-pi"),
         Agent("ori", "Ori", R.string.linux_agent_ori, "github:OpenRouterLabs/ori-releases", command = "ori code"),

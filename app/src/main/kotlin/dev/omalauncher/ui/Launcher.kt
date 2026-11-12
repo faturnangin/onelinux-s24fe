@@ -105,7 +105,9 @@ private fun DesktopScreen(
             state.sharing != null -> state.sharing = null
             runtime.widgets.openScreen != null -> runtime.widgets.openScreen = null
             state.pulled != null -> state.closePull()
-            else -> state.close()
+            state.drawer.value > 0.01f -> state.close()
+            !state.folderMode -> state.folderMode = true
+            else -> (context as? android.app.Activity)?.finish()
         }
     }
 
@@ -130,8 +132,12 @@ private fun DesktopScreen(
     // What frosted nodes blur: the background drawn above, or by our live wallpaper, slid as far as the pages.
     val backdrop = remember(runtime, state) { Backdrop({ runtime.themes.background }, { state.wallpaperOffset }) }
     CompositionLocalProvider(LocalHomeCovered provides covered, LocalBackdrop provides backdrop) {
-        // The whole window: a face fills it, and tiles keep clear of the system bars and the bar themselves.
-        HomeScreen(runtime, state, Modifier.fillMaxSize())
+        // The whole window: One UI Folder Hub or the classic widget grid
+        if (state.folderMode) {
+            OneUiFolderHub(runtime, state, onSwitchToGrid = { state.folderMode = false }, Modifier.fillMaxSize())
+        } else {
+            HomeScreen(runtime, state, Modifier.fillMaxSize())
+        }
     }
     HomeMenu(runtime, state)
 
@@ -275,7 +281,7 @@ private fun DesktopScreen(
                         // Home only: the open app list has everything.
                         // Swiping up from either does what it does on home, as from the dock on stock launchers.
                         // Keys go between it and home's tiles both ways, which Compose's search doesn't find (see PromptBar).
-                        if (LauncherStyle.recentApps && !panelShown) {
+                        if (LauncherStyle.recentApps && !panelShown && !state.folderMode) {
                             RecentStrip(runtime, handlers, Modifier.homeSwipe(runtime, state, enabled = !locked).lockedTaps(locked).focusRequester(state.stripEntry).focusGroup(), home = state.homeEntry)
                         }
                         // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.

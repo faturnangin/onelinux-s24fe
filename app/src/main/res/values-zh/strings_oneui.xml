@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="oneui_app_title">OneLinux</string>
+    <string name="oneui_app_subtitle">Galaxy S24 FE • Exynos 2400e (Xclipse 940)</string>
+    <string name="oneui_section_status">硬件加速与状态</string>
+    <string name="oneui_status_gpu">GPU: Xclipse 940 (AMD RDNA 3)</string>
+    <string name="oneui_status_driver">驱动: RADV Xclipse (Vulkan + Zink)</string>
+    <string name="oneui_status_wayland">合成器: 内置 Wayland (Direct Surface)</string>
+    <string name="oneui_status_storage">共享存储: /sdcard (读写)</string>
+    <string name="oneui_status_storage_need_perm">存储: 需要授予所有文件访问权限</string>
+    <string name="oneui_section_workspaces">桌面与工作区</string>
+    <string name="oneui_desktop_title">Noctalia 桌面</string>
+    <string name="oneui_desktop_desc">带有 QuickShell 栏和平铺 Wayland 桌面及原生 Vulkan 渲染</string>
+    <string name="oneui_desktop_launch">启动桌面</string>
+    <string name="oneui_agy_title">Antigravity 工作区 (agy)</string>
+    <string name="oneui_agy_desc">位于 /sdcard/Projects 的 AI 编程助手与开发环境</string>
+    <string name="oneui_agy_launch">启动 agy 终端</string>
+    <string name="oneui_section_apps">Linux 应用程序</string>
+    <string name="oneui_apps_empty">尚未发现 Linux 应用程序</string>
+    <string name="oneui_section_driver">GPU 驱动管理 (OTA 热切换)</string>
+    <string name="oneui_driver_active">当前驱动: radv-xclipse</string>
+    <string name="oneui_driver_check_github">检查 GitHub 更新</string>
+    <string name="oneui_driver_import">导入驱动 (.zip/.tar.xz)</string>
+    <string name="oneui_section_storage">共享存储文件夹</string>
+    <string name="oneui_folder_downloads">下载文件夹 (/sdcard/Download)</string>
+    <string name="oneui_folder_documents">文档文件夹 (/sdcard/Documents)</string>
+    <string name="oneui_folder_projects">项目文件夹 (/sdcard/Projects)</string>
+    <string name="oneui_perm_grant_all_files">授予所有文件访问权限</string>
+    <string name="oneui_install_title">PRoot Linux 环境</string>
+    <string name="oneui_install_desc">配置具备 Xclipse 940 硬件加速的 Arch Linux ARM64</string>
+    <string name="oneui_install_btn">立即安装 Linux</string>
+    <string name="oneui_installing_title">正在准备 Linux 环境...</string>
+    <string name="oneui_installing_cancel">取消</string>
+    <string name="oneui_install_failed">Linux 安装失败</string>
+    <string name="oneui_install_retry">重试</string>
+    <string name="oneui_dialog_driver_title">RADV Xclipse 驱动更新</string>
+    <string name="oneui_dialog_driver_desc">从 JimVulkan/radv-xclipse 下载最新版本</string>
+    <string name="oneui_dialog_downloading">正在下载...</string>
+    <string name="oneui_dialog_success">驱动更新成功！</string>
+    <string name="oneui_dialog_close">关闭</string>
+    <string name="oneui_refresh">刷新</string>
+    <string name="oneui_settings">设置</string>
+    <string name="oneui_terminal_app">终端</string>
+    <string name="oneui_install_import_tarball">导入本地 Rootfs 压缩包 (.tar.gz)</string>
+    <string name="oneui_tarball_imported">Rootfs 压缩包已导入！点击安装继续。</string>
+</resources>

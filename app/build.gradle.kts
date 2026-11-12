@@ -18,7 +18,7 @@ android {
     ndkVersion = prootNdk
 
     defaultConfig {
-        applicationId = "dev.omalauncher"
+        applicationId = "dev.onelinux"
         minSdk = 29
         targetSdk = 37
         versionCode = 33
@@ -36,7 +36,7 @@ android {
         jniLibs {
             // Extract .so files to nativeLibraryDir: proot is exec'd from there.
             useLegacyPackaging = true
-            keepDebugSymbols += listOf("**/libproot.so", "**/libproot-loader.so")
+            keepDebugSymbols += listOf("**/libproot.so", "**/libproot-loader.so", "**/libchroot-ng.so")
         }
     }
 

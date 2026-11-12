@@ -41,7 +41,12 @@ class LinuxService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.linux_notification_channel), NotificationManager.IMPORTANCE_LOW))
         val state = (application as App).runtime.bootstrap.state
-        startForeground(1, notification(state.value), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        val fgsType = if (android.os.Build.VERSION.SDK_INT >= 30) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        } else {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        }
+        startForeground(1, notification(state.value), fgsType)
         pending = (pending - 1).coerceAtLeast(0)
         // Stopped before it got here (see [set]): now it may go, unless a later start still has to come here too.
         if (!wanted) {

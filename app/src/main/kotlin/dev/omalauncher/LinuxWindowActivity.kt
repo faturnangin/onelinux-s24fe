@@ -3,7 +3,6 @@ package dev.omalauncher
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Bundle
@@ -13,9 +12,11 @@ import android.view.SurfaceView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onSizeChanged
@@ -58,9 +60,30 @@ import kotlinx.coroutines.flow.first
  * Recents card and behaves like a separate app.
  */
 class LinuxWindowActivity : InstantActivity() {
-    private var window: XdgToplevel? = null
+    private var linuxWindow: XdgToplevel? = null
     private val imagePicker = ImagePicker(this) { runtime }
     private val asks = WidgetAsks(this)
+    private var isFullscreen by mutableStateOf(true)
+
+    private fun applyFullscreenBars(fullscreen: Boolean) {
+        val bars = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+        bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (fullscreen) {
+            bars.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        } else {
+            bars.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    private fun toggleFullscreen() {
+        val next = !isFullscreen
+        isFullscreen = next
+        getSharedPreferences("onelinux_window_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("pref_fullscreen", next)
+            .apply()
+        applyFullscreenBars(next)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,9 +93,19 @@ class LinuxWindowActivity : InstantActivity() {
             finishAndRemoveTask()
             return
         }
-        this.window = window
+        this.linuxWindow = window
+        val isDesktopWindow = window.appId.equals("org.freedesktop.niri", ignoreCase = true) ||
+            window.appId.equals("niri", ignoreCase = true)
+        val prefs = getSharedPreferences("onelinux_window_prefs", Context.MODE_PRIVATE)
+        isFullscreen = if (isDesktopWindow) true else prefs.getBoolean("pref_fullscreen", true)
+        applyFullscreenBars(isFullscreen)
         setInstantContent {
-            AppWindow(runtime, window)
+            AppWindow(
+                runtime = runtime,
+                window = window,
+                isFullscreen = isFullscreen,
+                onToggleFullscreen = { toggleFullscreen() },
+            )
             BackHandler { backInstantly() }
             LaunchedEffect(window) {
                 snapshotFlow { window in runtime.wm.appWindows }.first { !it }
@@ -80,7 +113,7 @@ class LinuxWindowActivity : InstantActivity() {
             }
             // Terminals retitle constantly; only a new label changes the Recents card.
             val label = runtime.displayName(window.appId, window.title)
-            val appIcon = runtime.iconNamed(runtime.agentOf(window.appId, label)?.name ?: label)
+            val appIcon = runtime.iconForWindow(window.appId, window.title)
             LaunchedEffect(label, appIcon, Palette.accent) { describeTask(label, appIcon?.asAndroidBitmap()) }
         }
     }
@@ -92,7 +125,12 @@ class LinuxWindowActivity : InstantActivity() {
 
     override fun onResume() {
         super.onResume()
-        window?.let(runtime.wm::focus)
+        linuxWindow?.let {
+            runtime.wm.focus(it)
+            val isDesktopWindow = it.appId.equals("org.freedesktop.niri", ignoreCase = true) ||
+                it.appId.equals("niri", ignoreCase = true)
+            applyFullscreenBars(if (isDesktopWindow) true else isFullscreen)
+        }
         runtime.keyboard.imagePicker = imagePicker
         asks.resumed(runtime)
     }
@@ -105,7 +143,7 @@ class LinuxWindowActivity : InstantActivity() {
     /** Swiping the card away in Recents closes the Linux window, like closing an app. */
     override fun onDestroy() {
         super.onDestroy()
-        val w = window ?: return
+        val w = linuxWindow ?: return
         if (isFinishing && w in runtime.wm.appWindows) runtime.wm.close(w)
     }
 
@@ -119,6 +157,11 @@ class LinuxWindowActivity : InstantActivity() {
         }
         if (runtime.keyboard.handle(event)) return true
         return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchKeyShortcutEvent(event: KeyEvent): Boolean {
+        if (runtime.keyboard.handle(event)) return true
+        return super.dispatchKeyShortcutEvent(event)
     }
 
     /** Keys held as the window goes, like Super, would stay down for it: Android sends their lift elsewhere. */
@@ -141,7 +184,7 @@ internal fun taskIcon(
 ): Bitmap {
     val size = 192
     val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bmp)
+    val canvas = android.graphics.Canvas(bmp)
     canvas.drawColor(background)
     val words = name.split(Regex("[^A-Za-z0-9]+")).filter { it.isNotEmpty() }
     val initials =
@@ -167,6 +210,8 @@ internal fun taskIcon(
 private fun AppWindow(
     runtime: Runtime,
     window: XdgToplevel,
+    isFullscreen: Boolean,
+    onToggleFullscreen: () -> Unit,
 ) {
     var sink by remember { mutableStateOf<KeyboardSink?>(null) }
     var surfaceView by remember { mutableStateOf<WindowSurfaceView?>(null) }
@@ -175,12 +220,16 @@ private fun AppWindow(
     val density = LocalDensity.current
     // Where the keyboard ends up, not each frame of its slide, and read here so the extra keys come and go in the same
     // frame: the window then resizes once, and a terminal reflows once.
+    val isDesktop = remember(window.appId) {
+        window.appId.equals("org.freedesktop.niri", ignoreCase = true) ||
+            window.appId.equals("niri", ignoreCase = true)
+    }
     val keyboard = (WindowInsets.imeAnimationTarget.getBottom(density) - WindowInsets.navigationBars.getBottom(density)).coerceAtLeast(0)
     Box(
         Modifier
             .fillMaxSize()
             .background(Palette.background)
-            .systemBarsPadding(),
+            .then(if (isFullscreen || isDesktop) Modifier else Modifier.systemBarsPadding()),
     ) {
         AndroidView(
             factory = { KeyboardSink(it, runtime.keyboard).also { v -> sink = v } },
@@ -206,21 +255,81 @@ private fun AppWindow(
                 // Over the SurfaceView, which Compose's pointer input doesn't reach.
                 // A tap on the prompt line brings the keyboard back, as the ⌨ button does.
                 Box(Modifier.fillMaxSize().linuxWindowInput(runtime.wm, window) { sink?.takeUnless { it.showing }?.show() })
-                Box(
-                    Modifier
+                Row(
+                    modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(12.dp)
-                        .size(40.dp)
-                        .background(Palette.overlay, CircleShape)
-                        .clickable { sink?.toggle() },
-                    contentAlignment = Alignment.Center,
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    BasicText("⌨", style = Mono.copy(color = Palette.foreground))
+                    if (!isDesktop) {
+                        // Fullscreen toggle button
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .background(Palette.overlay, CircleShape)
+                                .clickable { onToggleFullscreen() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            FullscreenVectorIcon(
+                                isFullscreen = isFullscreen,
+                                tint = if (isFullscreen) Palette.accent else Palette.foreground,
+                            )
+                        }
+                    }
+                    Box(
+                        Modifier
+                            .size(if (isDesktop) 32.dp else 40.dp)
+                            .background(if (isDesktop) Palette.overlay.copy(alpha = 0.35f) else Palette.overlay, CircleShape)
+                            .clickable { sink?.toggle() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        BasicText(
+                            "⌨",
+                            style = Mono.copy(
+                                color = if (isDesktop) Palette.foreground.copy(alpha = 0.5f) else Palette.foreground
+                            ),
+                        )
+                    }
                 }
             }
             // Below the window rather than over it, so the window shrinks and nothing hides behind the keys; only over a
             // docked keyboard (a hardware keyboard's toolbar takes no height, and that keyboard has these keys).
             if (keyboard > 0) ExtraKeys(runtime, Modifier.background(Palette.background))
+        }
+    }
+}
+
+@Composable
+private fun FullscreenVectorIcon(
+    isFullscreen: Boolean,
+    tint: androidx.compose.ui.graphics.Color,
+) {
+    androidx.compose.foundation.Canvas(modifier = Modifier.size(16.dp)) {
+        val stroke = 2.dp.toPx()
+        val w = size.width
+        val h = size.height
+        val c = 4.5.dp.toPx()
+        if (isFullscreen) {
+            // Restore icon (collapse inwards)
+            drawLine(tint, Offset(0f, c), Offset(c, c), stroke)
+            drawLine(tint, Offset(c, 0f), Offset(c, c), stroke)
+            drawLine(tint, Offset(w, c), Offset(w - c, c), stroke)
+            drawLine(tint, Offset(w - c, 0f), Offset(w - c, c), stroke)
+            drawLine(tint, Offset(0f, h - c), Offset(c, h - c), stroke)
+            drawLine(tint, Offset(c, h), Offset(c, h - c), stroke)
+            drawLine(tint, Offset(w, h - c), Offset(w - c, h - c), stroke)
+            drawLine(tint, Offset(w - c, h), Offset(w - c, h - c), stroke)
+        } else {
+            // Fullscreen icon (expand outwards)
+            drawLine(tint, Offset(0f, c), Offset(0f, 0f), stroke)
+            drawLine(tint, Offset(0f, 0f), Offset(c, 0f), stroke)
+            drawLine(tint, Offset(w - c, 0f), Offset(w, 0f), stroke)
+            drawLine(tint, Offset(w, 0f), Offset(w, c), stroke)
+            drawLine(tint, Offset(0f, h - c), Offset(0f, h), stroke)
+            drawLine(tint, Offset(0f, h), Offset(c, h), stroke)
+            drawLine(tint, Offset(w - c, h), Offset(w, h), stroke)
+            drawLine(tint, Offset(w, h), Offset(w, h - c), stroke)
         }
     }
 }

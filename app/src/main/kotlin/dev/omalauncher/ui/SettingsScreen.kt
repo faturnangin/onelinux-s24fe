@@ -67,10 +67,11 @@ fun SettingsScreen(
     val askLocalNetwork = rememberAskPermission(LocalNetwork.PERMISSION) { localNetworkMissing = !it }
     val roles = remember { context.getSystemService(RoleManager::class.java) }
     val homeRoleMissing = { roles.isRoleAvailable(RoleManager.ROLE_HOME) && !roles.isRoleHeld(RoleManager.ROLE_HOME) }
-    var notHome by remember { mutableStateOf(homeRoleMissing()) }
+    // Standalone One UI Folder Hub mode: never prompts to replace Samsung One UI 9 Home.
+    var notHome by remember { mutableStateOf(false) }
     // Made the default (or not), or the local network allowed, in Android's settings or the permissions screen while away.
     LifecycleResumeEffect(Unit) {
-        notHome = homeRoleMissing()
+        notHome = false
         localNetworkMissing = LocalNetwork.missing(context)
         onPauseOrDispose {}
     }

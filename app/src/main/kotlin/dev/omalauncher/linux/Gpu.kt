@@ -1,6 +1,7 @@
 package dev.omalauncher.linux
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.annotation.StringRes
@@ -9,9 +10,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.omalauncher.LauncherData
 import dev.omalauncher.R
+import dev.omalauncher.openHttp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.InputStream
+import java.util.zip.ZipInputStream
 
 /**
  * Opt-in GPU acceleration for Linux apps. The device node picks the driver:
@@ -34,13 +43,32 @@ class Gpu(
 
     /** The pinned driver for this phone, or null when we have none. */
     private val spec: GpuDriver? = gpuKind(
-        File("/dev/mali0").exists(),
-        File("/dev/kgsl-3d0").exists(),
-        runCatching { File("/sys/class/kgsl/kgsl-3d0/gpu_model").readText() }.getOrNull(),
+        hasMali = File("/dev/mali0").exists(),
+        hasKgsl = File("/dev/kgsl-3d0").exists(),
+        kgslModel = runCatching { File("/sys/class/kgsl/kgsl-3d0/gpu_model").readText() }.getOrNull(),
+        hasDrmRender = File("/dev/dri/renderD128").exists() || File("/sys/class/drm/renderD128").exists(),
+        socOrGpuModel = listOfNotNull(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else null,
+            Build.HARDWARE,
+            Build.BOARD,
+            runCatching { File("/sys/kernel/gpu/gpu_model").readText() }.getOrNull(),
+        ).joinToString(" "),
     )?.let(GpuDrivers::of)
 
     /** The phone has a GPU we have a driver for. */
     val supported = spec != null
+
+    /** Whether this phone uses the hot-swappable Xclipse RADV driver (`JimVulkan/radv-xclipse`). */
+    val isXclipse = spec?.kind == GpuKind.XCLIPSE
+
+    /** Version or filename of the custom imported `radv-xclipse` driver, or null when using default. */
+    var customDriverVersion by mutableStateOf(readCustomDriverVersion())
+        private set
+
+    private fun readCustomDriverVersion(): String? =
+        runCatching { proot.hostFile(GpuDrivers.XCLIPSE_CUSTOM_META).takeIf { it.isFile }?.readText()?.trim() }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
 
     /** "Mali" or "Adreno", for the settings row. Empty when [supported] is false. */
     val driverLabel: String get() = spec?.label ?: ""
@@ -185,6 +213,179 @@ class Gpu(
             prefs.edit().putString(CHECKED_BUILD, build).putString(DEVICE, name).apply()
         }
         return ok
+    }
+
+    /**
+     * Hot-swaps the Xclipse RADV driver from a local URI (`.zip` from `JimVulkan/radv-xclipse`,
+     * `.pkg.tar.xz`, or raw `libvulkan_radeon.so`) without resetting the Linux rootfs.
+     */
+    suspend fun importXclipseDriver(
+        uri: Uri,
+        displayName: String,
+    ) {
+        val driver = spec ?: return
+        if (state is JobState.Working) return
+        state = JobState.Working(R.string.linux_job_updating, listOf(displayName))
+        val extracted = withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    stageXclipseStream(input, displayName)
+                } ?: error("cannot open $displayName")
+            }
+        }
+        if (extracted.isFailure) {
+            state = JobState.Failed(listOf(extracted.exceptionOrNull()?.message ?: "failed to read driver package"))
+            return
+        }
+        customDriverVersion = readCustomDriverVersion()
+        applyStagedXclipseDriver(driver)
+    }
+
+    /**
+     * Hot-swaps the Xclipse RADV driver directly from a URL (e.g. a GitHub release asset
+     * or `JimVulkan/radv-xclipse` latest release).
+     */
+    suspend fun downloadXclipseDriver(url: String) {
+        val driver = spec ?: return
+        if (state is JobState.Working) return
+        val trimmed = url.trim().ifEmpty { GpuDrivers.XCLIPSE_GITHUB_REPO }
+        state = JobState.Working(R.string.linux_job_updating, listOf(trimmed))
+        val fetched = withContext(Dispatchers.IO) {
+            runCatching {
+                val resolvedUrl = resolveGithubReleaseAsset(trimmed)
+                val label = resolvedUrl.substringAfterLast('/').ifEmpty { "radv-xclipse" }
+                val conn = openHttp(resolvedUrl, connectTimeout = 15_000, readTimeout = 60_000)
+                try {
+                    if (conn.responseCode !in 200..299) error("HTTP ${conn.responseCode} from $resolvedUrl")
+                    conn.inputStream.use { input -> stageXclipseStream(input, label) }
+                } finally {
+                    conn.disconnect()
+                }
+            }
+        }
+        if (fetched.isFailure) {
+            state = JobState.Failed(listOf(fetched.exceptionOrNull()?.message ?: "failed to download driver"))
+            return
+        }
+        customDriverVersion = readCustomDriverVersion()
+        applyStagedXclipseDriver(driver)
+    }
+
+    private suspend fun applyStagedXclipseDriver(driver: GpuDriver) {
+        stageMesaBundle()
+        val script = "rm -f /var/lib/pacman/db.lck 2>/dev/null || true; " +
+            GpuDrivers.hotSwapXclipseScript(driver) + " && " +
+            GpuDrivers.mesaZinkScript() + " && " +
+            GpuDrivers.probeScript(driver)
+        if (run(R.string.linux_job_updating, script)) {
+            prefs.edit().putBoolean(WANTED, true).apply()
+            wanted = true
+            activate(driver)
+        } else {
+            state = JobState.Failed((state as? JobState.Failed)?.log.orEmpty())
+        }
+    }
+
+    private fun stageXclipseStream(
+        input: InputStream,
+        name: String,
+    ) {
+        val staged = proot.hostFile(GpuDrivers.XCLIPSE_CUSTOM_STAGED)
+        val meta = proot.hostFile(GpuDrivers.XCLIPSE_CUSTOM_META)
+        staged.parentFile?.mkdirs()
+        val tmp = File(staged.parentFile, "libvulkan_radeon.so.tmp")
+        val lower = name.lowercase()
+        val found = when {
+            lower.endsWith(".zip") -> extractSoFromZip(BufferedInputStream(input), tmp)
+            lower.endsWith(".tar.xz") || lower.endsWith(".txz") -> extractSoFromTarXz(BufferedInputStream(input), tmp)
+            else -> {
+                tmp.outputStream().use { out -> input.copyTo(out) }
+                true
+            }
+        }
+        check(found && tmp.isFile && tmp.length() > 1024L) {
+            "No libvulkan_radeon.so found in $name"
+        }
+        // Verify ELF magic (\x7FELF)
+        val header = ByteArray(4)
+        tmp.inputStream().use { it.read(header) }
+        check(header[0] == 0x7F.toByte() && header[1] == 'E'.code.toByte() && header[2] == 'L'.code.toByte() && header[3] == 'F'.code.toByte()) {
+            "$name is not a valid ELF shared library (note: WCP/Bionic drivers are for Winlator; use a glibc .so/.zip build)"
+        }
+        tmp.setExecutable(true, false)
+        if (staged.exists()) staged.delete()
+        check(tmp.renameTo(staged)) { "cannot stage $name" }
+        meta.writeText(name.substringAfterLast('/'))
+    }
+
+    private fun extractSoFromZip(
+        input: InputStream,
+        dest: File,
+    ): Boolean {
+        ZipInputStream(input).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                val fn = entry.name.substringAfterLast('/')
+                if (!entry.isDirectory && (fn.startsWith("libvulkan_radeon.so") || fn.startsWith("libvulkan_freedreno_radv.so"))) {
+                    dest.outputStream().use { out -> zip.copyTo(out) }
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private fun extractSoFromTarXz(
+        input: InputStream,
+        dest: File,
+    ): Boolean {
+        TarArchiveInputStream(XZCompressorInputStream(input)).use { tar ->
+            while (true) {
+                val entry = tar.nextEntry ?: break
+                if (entry.isFile && entry.name.substringAfterLast('/').startsWith("libvulkan_radeon.so")) {
+                    dest.outputStream().use { out -> tar.copyTo(out) }
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /**
+     * If [url] points to the `JimVulkan/radv-xclipse` repo root or `/releases`, resolves the latest
+     * glibc `.zip` or `.so` asset URL from GitHub's releases page without hitting API rate limits.
+     */
+    private fun resolveGithubReleaseAsset(url: String): String {
+        if (url.endsWith(".so") || url.endsWith(".zip") || url.endsWith(".tar.xz")) return url
+        val releasesUrl = if (url.contains("github.com/")) {
+            url.trimEnd('/').removeSuffix("/releases") + "/releases"
+        } else {
+            "${GpuDrivers.XCLIPSE_GITHUB_REPO}/releases"
+        }
+        val html = fetchText(releasesUrl)
+        val tagMatch = Regex("""/releases/expanded_assets/([^"'\s>]+)""").find(html)
+            ?: Regex("""/releases/tag/([^"'\s>]+)""").find(html)
+            ?: error("No releases found at $releasesUrl")
+        val tag = tagMatch.groupValues[1]
+        val baseRepo = releasesUrl.removeSuffix("/releases")
+        val assetsHtml = runCatching { fetchText("$baseRepo/releases/expanded_assets/$tag") }.getOrDefault(html)
+        val assetLinks = Regex("""href="([^"]+/releases/download/[^"]+)"""").findAll(assetsHtml)
+            .map { it.groupValues[1] }
+            .map { if (it.startsWith("http")) it else "https://github.com$it" }
+            .toList()
+        return assetLinks.firstOrNull { it.contains("glibc", ignoreCase = true) && (it.endsWith(".zip") || it.endsWith(".so")) }
+            ?: assetLinks.firstOrNull { !it.endsWith(".wcp") && (it.endsWith(".zip") || it.endsWith(".so") || it.endsWith(".tar.xz")) }
+            ?: error("No glibc .zip/.so asset found in release $tag (found only Winlator .wcp; build or import radv-glibc .zip)")
+    }
+
+    private fun fetchText(url: String): String {
+        val conn = openHttp(url, connectTimeout = 10_000, readTimeout = 15_000)
+        return try {
+            if (conn.responseCode !in 200..299) error("HTTP ${conn.responseCode} from $url")
+            conn.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            conn.disconnect()
+        }
     }
 
     companion object {

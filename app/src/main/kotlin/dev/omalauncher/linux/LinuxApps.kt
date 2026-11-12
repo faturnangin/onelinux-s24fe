@@ -16,8 +16,12 @@ data class LinuxApp(
 
 /** Whether a window with Wayland [appId] belongs to this app: by desktop id, StartupWMClass, or reverse-DNS tail. */
 fun LinuxApp.matches(appId: String): Boolean {
-    val id = appId.lowercase()
-    return this.id.lowercase() == id || wmClass?.lowercase() == id || this.id.substringAfterLast('.').lowercase() == id
+    val id = appId.lowercase().trim()
+    val thisId = this.id.lowercase().trim()
+    val wm = wmClass?.lowercase()?.trim()
+    return thisId == id || wm == id || this.id.substringAfterLast('.').lowercase() == id ||
+        (thisId.isNotEmpty() && id.contains(thisId)) || (id.isNotEmpty() && thisId.contains(id)) ||
+        (wm != null && (id.contains(wm) || wm.contains(id)))
 }
 
 private val FIELD_CODE = Regex("%[fFuUdDnNickvm]")

@@ -123,6 +123,11 @@
     <string name="linux_retry">coba lagi</string>
     <string name="linux_gpu_turn_off">nonaktifkan</string>
     <string name="linux_gpu_turn_on">aktifkan</string>
+    <string name="linux_gpu_import">impor driver (.zip/.so)</string>
+    <string name="linux_gpu_github">perbarui dari github</string>
+    <string name="linux_gpu_github_title">perbarui driver radv-xclipse</string>
+    <string name="linux_gpu_github_hint">Repositori GitHub atau URL langsung file rilis (.zip/.so)</string>
+    <string name="linux_gpu_custom_active">driver kustom: %1$s</string>
 
     <string name="linux_notification_channel">Sesi Linux</string>
     <string name="linux_notify_channel">Agen dan skrip</string>

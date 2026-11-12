@@ -207,8 +207,10 @@ class WindowRenderer(
         val layers = ArrayList<Layer>()
         addTree(layers, window.surface, -g.x * scale, -g.y * scale, scale, inPopup = false)
         for (popup in server.popups) {
-            if (server.toplevelOf(popup.surface) !== window) continue
-            val origin = geometryOrigin(popup.xdg, scale) ?: continue
+            val toplevel = server.toplevelOf(popup.surface)
+            val origin = geometryOrigin(popup.xdg, scale)
+            if (toplevel !== window) continue
+            if (origin == null) continue
             val pg = popup.xdg.effectiveGeometry
             addTree(layers, popup.surface, origin.first - pg.x * scale, origin.second - pg.y * scale, scale, inPopup = true)
         }
@@ -279,6 +281,6 @@ class WindowRenderer(
          * 120 Hz screen following it took twice the CPU and battery. The least time between frames, less a quarter so
          * a frame a little early still takes its vsync.
          */
-        const val MIN_INTERVAL = 1_000_000_000L / 60 * 3 / 4
+        const val MIN_INTERVAL = 1_000_000_000L / 120 * 3 / 4
     }
 }

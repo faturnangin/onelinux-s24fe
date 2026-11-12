@@ -65,4 +65,16 @@
     <string name="drawer_action_pin">tambah ke layar utama</string>
     <string name="drawer_action_info">info aplikasi</string>
     <string name="drawer_action_uninstall">uninstal</string>
+
+    <!-- One UI 9 Folder Hub -->
+    <string name="oneui_hub_title">Aplikasi Linux</string>
+    <string name="oneui_hub_subtitle">Galaxy S24 FE · Exynos 2400e · RADV-Xclipse</string>
+    <string name="oneui_action_desktop">Noctalia Desktop</string>
+    <string name="oneui_action_browser">Chromium WebGL</string>
+    <string name="oneui_action_agy">Antigravity CLI</string>
+    <string name="oneui_action_gpu">RADV-Xclipse GPU</string>
+    <string name="oneui_action_storage">Penyimpanan Bersama: Penuh</string>
+    <string name="oneui_action_storage_scoped">Penyimpanan: Izinkan Semua File</string>
+    <string name="oneui_switch_grid">tampilan widget</string>
+    <string name="oneui_switch_folder">tampilan folder</string>
 </resources>

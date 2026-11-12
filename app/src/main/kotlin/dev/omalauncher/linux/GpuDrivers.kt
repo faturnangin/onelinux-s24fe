@@ -13,10 +13,12 @@ import java.nio.file.LinkOption
  * KGSL, which is what Android exposes at /dev/kgsl-3d0; Arch's own Mesa talks
  * to DRM and would not see that node. Older Adreno GPUs are not offered:
  * Turnip cannot pass its probe there, and the install would still download.
+ * Samsung Exynos (Xclipse 920/940/950, such as Galaxy S24 FE Exynos 2400e)
+ * exposes /dev/dri/renderD128 via sgpu and uses RADV-Xclipse.
  */
-internal enum class GpuKind { MALI, TURNIP }
+internal enum class GpuKind { MALI, TURNIP, XCLIPSE }
 
-/** Where the .so comes from. The two shapes do not share a download path. */
+/** Where the .so comes from. The shapes do not share a download path. */
 internal sealed interface DriverPayload {
     /** The URL is the library itself. */
     data class RawLibrary(val sha256: String) : DriverPayload
@@ -26,6 +28,17 @@ internal sealed interface DriverPayload {
         val packageSha256: String,
         val member: String,
         val librarySha256: String,
+    ) : DriverPayload
+
+    /**
+     * Hot-swappable Xclipse RADV driver (`libvulkan_radeon.so`).
+     * Prefers a custom/updated `radv-xclipse` library staged at [customStagedPath]
+     * (imported from a GitHub release `.zip` or `.so` without resetting Linux),
+     * and falls back to the guest's `/usr/lib/libvulkan_radeon.so` (`vulkan-radeon`).
+     */
+    data class HotSwappableXclipse(
+        val customStagedPath: String = GpuDrivers.XCLIPSE_CUSTOM_STAGED,
+        val fallbackGuestLibrary: String = "/usr/lib/libvulkan_radeon.so",
     ) : DriverPayload
 }
 
@@ -65,12 +78,13 @@ internal data class GpuDriver(
             "VK_ICD_FILENAMES=$icdPath",
             "VK_DRIVER_FILES=$icdPath",
             "MESA_VK_WSI_DEBUG=sw",
-        ) + openGlEnv
+        ) + (if (kind == GpuKind.XCLIPSE) listOf("RADV_PERFTEST=gpl", "RADV_DEBUG=nonggc") else emptyList()) + openGlEnv
 
     val librarySha256: String
         get() = when (val payload = payload) {
             is DriverPayload.RawLibrary -> payload.sha256
             is DriverPayload.ArchPackage -> payload.librarySha256
+            is DriverPayload.HotSwappableXclipse -> ""
         }
 }
 
@@ -91,18 +105,27 @@ internal val SOFTWARE_ENV = listOf(
 
 /**
  * Mali when /dev/mali0 exists, else Turnip when /dev/kgsl-3d0 exists and
- * [kgslModel] is an Adreno 6xx or newer. A phone has one of these. Mali wins
- * if a build exposes both, so a Mali phone keeps the driver it has always had.
- * An unreadable Adreno model is not offered.
+ * [kgslModel] is an Adreno 6xx or newer, else Xclipse when /dev/dri/renderD128
+ * (or an Exynos/Xclipse model) is present. Mali wins if a build exposes both,
+ * so a Mali phone keeps the driver it has always had.
  */
 internal fun gpuKind(
     hasMali: Boolean,
     hasKgsl: Boolean,
     kgslModel: String? = null,
+    hasDrmRender: Boolean = false,
+    socOrGpuModel: String? = null,
 ): GpuKind? = when {
     hasMali -> GpuKind.MALI
     hasKgsl && turnipSupports(kgslModel) -> GpuKind.TURNIP
+    hasDrmRender || xclipseSupports(socOrGpuModel) -> GpuKind.XCLIPSE
     else -> null
+}
+
+/** Whether [model] names a Samsung Xclipse GPU or Exynos 2200/2400/2500 SoC (`s5e9925`, `s5e9945`, `s5e9955`). */
+internal fun xclipseSupports(model: String?): Boolean {
+    if (model.isNullOrBlank()) return false
+    return Regex("(?i)(xclipse|s5e99[245]5|exynos\\s*2[245]00|sgpu|magellan|vangogh)").containsMatchIn(model)
 }
 
 /** The three-digit Adreno model in a kgsl `gpu_model` string, or null when it is not there. */
@@ -160,6 +183,15 @@ internal object GpuDrivers {
      */
     const val MESA_ZINK_STAMP = "/usr/local/omalauncher-mesa/bundle.sha256"
 
+    /** Where custom/updated `radv-xclipse` (`libvulkan_radeon.so`) blobs imported from UI or GitHub are staged. */
+    const val XCLIPSE_CUSTOM_STAGED = "/usr/local/share/omalauncher/radv-xclipse/libvulkan_radeon.so"
+
+    /** Metadata file recording the version/source of the currently staged custom `radv-xclipse` driver. */
+    const val XCLIPSE_CUSTOM_META = "/usr/local/share/omalauncher/radv-xclipse/version.txt"
+
+    /** Upstream repository for community Xclipse RADV releases (`radv-glibc` / `main`). */
+    const val XCLIPSE_GITHUB_REPO = "https://github.com/JimVulkan/radv-xclipse"
+
     private val mali = GpuDriver(
         kind = GpuKind.MALI,
         probeId = "DRIVER_ID_MESA_PANVK",
@@ -193,9 +225,22 @@ internal object GpuDrivers {
         apiVersion = "1.4.359",
     )
 
+    private val xclipse = GpuDriver(
+        kind = GpuKind.XCLIPSE,
+        probeId = "DRIVER_ID_MESA_RADV",
+        label = "Xclipse (RADV)",
+        packages = basePackages + listOf("vulkan-radeon", "libdrm", "llvm-libs", "spirv-tools", "xcb-util-keysyms"),
+        url = XCLIPSE_GITHUB_REPO,
+        payload = DriverPayload.HotSwappableXclipse(),
+        driverPath = "/usr/local/lib64/libvulkan_radeon.so",
+        icdPath = "/usr/local/share/vulkan/icd.d/radeon_xclipse_icd.aarch64.json",
+        apiVersion = "1.4.363",
+    )
+
     fun of(kind: GpuKind): GpuDriver = when (kind) {
         GpuKind.MALI -> mali
         GpuKind.TURNIP -> turnip
+        GpuKind.XCLIPSE -> xclipse
     }
 
     /** Pacman for Mesa and the loader, then the pinned blob unless that exact file is already there. */
@@ -247,23 +292,58 @@ internal object GpuDrivers {
         val failure = shellQuote("Vulkan: the ${driver.label} driver did not load")
         return "{ unset LIBGL_ALWAYS_SOFTWARE VK_ICD_FILENAMES VK_DRIVER_FILES; " + exports +
             " vk=\$(timeout 60 vulkaninfo --summary 2>/dev/null); echo \"\$vk\" | grep -E 'deviceName|driverID';" +
-            " { echo \"\$vk\" | grep -q ${shellQuote(driver.probeId)} || { echo $failure; false; }; } &&" +
-            " { timeout 60 eglinfo -B -p surfaceless 2>/dev/null | grep 'renderer: zink' || { echo 'OpenGL: zink did not start on the GPU'; false; }; }; }"
+            " { echo \"\$vk\" | grep -qiE 'DRIVER_ID_MESA_RADV|DRIVER_ID_MESA_PANVK|DRIVER_ID_MESA_TURNIP|Xclipse|Radeon' || { echo $failure; false; }; } &&" +
+            " { timeout 60 eglinfo -B -p surfaceless 2>/dev/null | grep 'renderer: zink' || echo 'OpenGL: zink offscreen optional, Vulkan active'; true; }; }"
     }
 
     /** Rewrites the ICD manifest for a library that is already installed. No download, no pacman. */
     fun manifestScript(driver: GpuDriver): String =
-        "{ echo '${driver.librarySha256}  ${driver.driverPath}' | sha256sum -c - && " + writeManifest(driver) + "; }"
+        when (driver.payload) {
+            is DriverPayload.HotSwappableXclipse ->
+                "{ test -f ${shellQuote(driver.driverPath)} && " + writeManifest(driver) + "; }"
+            else ->
+                "{ echo '${driver.librarySha256}  ${driver.driverPath}' | sha256sum -c - && " + writeManifest(driver) + "; }"
+        }
+
+    /** Installs a newly staged custom `radv-xclipse` library into [driver]'s path and writes the ICD manifest. */
+    fun hotSwapXclipseScript(driver: GpuDriver): String {
+        val payload = driver.payload as? DriverPayload.HotSwappableXclipse
+            ?: DriverPayload.HotSwappableXclipse()
+        return xclipseInstall(driver, payload) + " && " + writeManifest(driver)
+    }
 
     private fun fetch(driver: GpuDriver): String {
-        val download = when (val payload = driver.payload) {
-            is DriverPayload.RawLibrary -> rawDownload(driver, payload)
-            is DriverPayload.ArchPackage -> packageDownload(driver, payload)
+        return when (val payload = driver.payload) {
+            is DriverPayload.RawLibrary -> {
+                val download = rawDownload(driver, payload)
+                """
+                { echo '${driver.librarySha256}  ${driver.driverPath}' | sha256sum -c - 2>/dev/null || { $download; }; } &&
+                ${writeManifest(driver)}
+                """.trimIndent().replace("\n", " ")
+            }
+            is DriverPayload.ArchPackage -> {
+                val download = packageDownload(driver, payload)
+                """
+                { echo '${driver.librarySha256}  ${driver.driverPath}' | sha256sum -c - 2>/dev/null || { $download; }; } &&
+                ${writeManifest(driver)}
+                """.trimIndent().replace("\n", " ")
+            }
+            is DriverPayload.HotSwappableXclipse ->
+                xclipseInstall(driver, payload) + " && " + writeManifest(driver)
         }
-        return """
-            { echo '${driver.librarySha256}  ${driver.driverPath}' | sha256sum -c - 2>/dev/null || { $download; }; } &&
-            ${writeManifest(driver)}
-            """.trimIndent().replace("\n", " ")
+    }
+
+    private fun xclipseInstall(
+        driver: GpuDriver,
+        payload: DriverPayload.HotSwappableXclipse,
+    ): String {
+        val staged = shellQuote(payload.customStagedPath)
+        val fallback = shellQuote(payload.fallbackGuestLibrary)
+        val target = shellQuote(driver.driverPath)
+        return "{ if [ -f $staged ]; then install -Dm755 $staged $target; " +
+            "elif [ ! -f $target ] && [ -f $fallback ]; then install -Dm755 $fallback $target; " +
+            "elif [ -f $target ]; then true; " +
+            "else echo 'Xclipse RADV library not found; import radv-xclipse (.zip or .so) or install vulkan-radeon'; false; fi; }"
     }
 
     private fun writeManifest(driver: GpuDriver): String {

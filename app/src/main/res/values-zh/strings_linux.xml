@@ -123,6 +123,11 @@
     <string name="linux_retry">重试</string>
     <string name="linux_gpu_turn_off">关闭</string>
     <string name="linux_gpu_turn_on">开启</string>
+    <string name="linux_gpu_import">导入驱动 (.zip/.so)</string>
+    <string name="linux_gpu_github">从 GitHub 更新</string>
+    <string name="linux_gpu_github_title">更新 radv-xclipse 驱动</string>
+    <string name="linux_gpu_github_hint">GitHub 仓库或直链发布包地址 (.zip/.so)</string>
+    <string name="linux_gpu_custom_active">自定义驱动：%1$s</string>
 
     <string name="linux_notification_channel">Linux 会话</string>
     <string name="linux_notify_channel">智能体和脚本</string>

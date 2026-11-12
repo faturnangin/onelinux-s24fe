@@ -103,7 +103,7 @@ class Runtime(
     val androidApps = AndroidAppCatalog(context)
     val usage = AppUsage(context)
     val themes = ThemeStore(context, proot, style, isLinux = { linux }, onConfigChanged = ::syncGuest)
-    private val audio = AudioBridge(proot)
+    private val audio = AudioBridge(context, proot)
     private val openBridge = OpenBridge(context, proot, onOpenFiles = ::openFiles, onOpenVoice = ::openVoice, onEdit = ::edit)
     val agents = AgentStore(proot, text = { id, arg -> context.getString(id, arg) }, onChanged = ::syncGuest)
     val pacman = Pacman(context, proot)
@@ -132,6 +132,7 @@ class Runtime(
     val voice by voiceSession
 
     init {
+        audio.isScreenActive = { screens > 0 }
         // Not started just for this: a Voice that never ran has nothing to stop.
         agents.release = { agent -> voiceSession.isInitialized() && voice.release(agent.bin) }
     }
@@ -175,7 +176,7 @@ class Runtime(
      * The first-run screen is done: from then on the home screen shows, with
      * or without Linux. Installs from before Linux was optional count as done.
      */
-    var launcherReady by mutableStateOf(prefs.getBoolean(SETUP_DONE, false) || bootstrap.wanted)
+    var launcherReady by mutableStateOf(true)
         private set
 
     /** Linux is installed and its services run: guest commands (like the update check) can go. */
@@ -219,12 +220,16 @@ class Runtime(
         wm.openAppWindow = { handle ->
             // Recents uses the activity's manifest label, not the task description's; see the aliases in the manifest.
             val window = wm.windowByHandle(handle)
-            val name = window?.let { displayName(it.appId, it.title) }
+            val name = window?.let { displayName(it.appId, it.title) }.orEmpty()
+            val appId = window?.appId.orEmpty()
+            val title = window?.title.orEmpty()
             val activity =
-                when (name) {
-                    "Terminal" -> "TerminalWindow"
-                    "btop" -> "BtopWindow"
-                    else -> agentOf(window?.appId.orEmpty(), name)?.windowAlias ?: "LinuxWindowActivity"
+                when {
+                    name.equals("btop", ignoreCase = true) || appId.equals("btop", ignoreCase = true) || title.contains("btop", ignoreCase = true) -> "BtopWindow"
+                    name.equals("Terminal", ignoreCase = true) || appId.equals("foot", ignoreCase = true) -> "TerminalWindow"
+                    name.contains("Chromium", ignoreCase = true) || appId.contains("chromium", ignoreCase = true) || title.contains("chromium", ignoreCase = true) -> "ChromiumWindow"
+                    name.contains("Antigravity IDE", ignoreCase = true) || appId.contains("antigravity-ide", ignoreCase = true) || title.contains("Antigravity IDE", ignoreCase = true) || appId.equals("code-oss", ignoreCase = true) -> "AntigravityIdeWindow"
+                    else -> agentOf(appId, name)?.windowAlias ?: "LinuxWindowActivity"
                 }
             InstantActivity.startInstantly(
                 context,
@@ -397,6 +402,24 @@ class Runtime(
         if (on) scope.launch { gpu.turnOn() } else gpu.turnOff()
     }
 
+    /** Imports a local Arch Linux ARM rootfs tarball (.tar.gz) from storage. */
+    fun importRootfsTarball(uri: Uri): Result<Unit> = bootstrap.importRootfsTarball(uri)
+
+    /** Hot-swaps the Xclipse RADV driver from a picked `.zip`, `.tar.xz`, or `.so` file without resetting Linux. */
+    fun importGpuDriver(
+        uri: Uri,
+        displayName: String,
+    ) {
+        if (!linux) return
+        scope.launch { gpu.importXclipseDriver(uri, displayName) }
+    }
+
+    /** Downloads and hot-swaps the Xclipse RADV driver from GitHub (`JimVulkan/radv-xclipse`) or a direct release asset URL. */
+    fun downloadGpuDriver(url: String) {
+        if (!linux) return
+        scope.launch { gpu.downloadXclipseDriver(url) }
+    }
+
     /** Checks for updates now, on the runtime's scope: leaving settings doesn't cancel it. */
     fun checkUpdates() {
         if (linux) scope.launch { updates.check(force = true) }
@@ -449,14 +472,20 @@ class Runtime(
     private var screens = 0
 
     fun screenStarted() {
-        if (screens++ == 0) proot.procShim.setActive(true)
+        if (screens++ == 0) {
+            proot.procShim.setActive(true)
+            audio.onScreensStarted()
+        }
         // Only checks when the last check is hours old; see SystemUpdates.
         if (linux) scope.launch { updates.check() }
     }
 
     fun screenStopped() {
         screens = (screens - 1).coerceAtLeast(0)
-        if (screens == 0) proot.procShim.setActive(false)
+        if (screens == 0) {
+            proot.procShim.setActive(false)
+            audio.onScreensStopped()
+        }
     }
 
     /** Whether every kind of app has been listed once: Android's, Linux's and owl's. Before, a list of them would be missing some. */
@@ -643,6 +672,35 @@ class Runtime(
 
     /** The drawer icon of the app called [name] (an agent's logo, say); null until loaded, or if it has none. */
     fun iconNamed(name: String): ImageBitmap? = linuxApps.apps.firstOrNull { it.name == name }?.let { linuxApps.icons[it.id] }
+
+    /** Resolves the app icon for a window by its Wayland appId, title, or matched Linux app. */
+    fun iconForWindow(
+        appId: String,
+        title: String,
+    ): ImageBitmap? {
+        val app = linuxAppFor(appId, title)
+        if (app != null) {
+            linuxApps.icons[app.id]?.let { return it }
+        }
+        val label = displayName(appId, title)
+        agentOf(appId, label)?.name?.let { agentName ->
+            iconNamed(agentName)?.let { return it }
+        }
+        return iconNamed(label)
+    }
+
+    fun linuxAppFor(
+        appId: String,
+        title: String,
+    ): LinuxApp? {
+        val cleanAppId = appId.lowercase().trim()
+        val cleanTitle = title.lowercase().trim()
+        return linuxApps.apps.firstOrNull { app ->
+            app.matches(cleanAppId) ||
+                (cleanAppId.isNotEmpty() && (cleanAppId.contains(app.id.lowercase()) || app.id.lowercase().contains(cleanAppId))) ||
+                (cleanTitle.isNotEmpty() && cleanTitle.contains(app.name.lowercase()))
+        }
+    }
 
     /**
      * Opens the settings activity at [page]: settings itself comes back to where it was left, another screen

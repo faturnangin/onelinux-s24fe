@@ -1,8 +1,12 @@
 package dev.omalauncher.ui
 
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isPrimaryPressed
@@ -16,6 +20,7 @@ import dev.omalauncher.wayland.BTN_MIDDLE
 import dev.omalauncher.wayland.BTN_RIGHT
 import dev.omalauncher.wayland.SurfaceHit
 import dev.omalauncher.wayland.XdgToplevel
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 private const val WHEEL_STEP = 15f
@@ -23,7 +28,8 @@ private const val WHEEL_STEP = 15f
 /**
  * Routes pointer input over a Linux window's view to its surfaces. Mouse input
  * is forwarded as-is. Touch is mapped for a phone: tap = left click, long
- * press = right click, drag = scroll; clients with wl_touch get real touch.
+ * press = right click, drag = scroll; clients with wl_touch get real touch
+ * with multi-touch support (pinch-to-zoom, multi-finger gestures).
  * A tap on the row of the window's text cursor (a terminal's prompt) also
  * calls [onCursorTap], after the program gets it.
  */
@@ -63,71 +69,144 @@ private suspend fun PointerInputScope.handlePointer(
         change.consume()
         if (!wm.onPress(window, hit) || hit == null) continue
 
-        // Clients with wl_touch (foot, GTK) get real touch: foot turns hold-and-drag into selection.
-        if (wm.wantsTouch(hit.surface)) {
-            val id = change.id.value.toInt()
-            wm.touchDown(hit, id)
-            var moved = false
-            var tapped = false
-            while (true) {
-                val next = awaitPointerEvent()
-                val c = next.changes.firstOrNull { it.id == change.id } ?: break
-                // Taken by the home screen (a long press lifts a tile): the touch ends here.
-                if (c.isConsumed) break
-                if (!c.pressed) {
-                    tapped = !moved && c.uptimeMillis - change.uptimeMillis < longPressMs
-                    break
-                }
-                c.consume()
-                if ((c.position - start).getDistance() > touchSlop) moved = true
-                val d = (c.position - start) / hit.scale
-                wm.touchMotion(id, hit.x + d.x, hit.y + d.y)
+        val wantsTouch = wm.wantsTouch(hit.surface)
+        if (wantsTouch) {
+            handleMultiTouch(wm, window, change, hit, touchSlop, longPressMs, onCursorTap)
+        } else {
+            handleSingleTouchFallback(wm, window, change, hit, touchSlop, longPressMs, onCursorTap)
+        }
+    }
+}
+
+private class ActiveTouch(
+    val slot: Int,
+    val hit: SurfaceHit,
+    val start: Offset,
+)
+
+private suspend fun AwaitPointerEventScope.handleMultiTouch(
+    wm: WindowManager,
+    window: XdgToplevel,
+    firstChange: PointerInputChange,
+    firstHit: SurfaceHit,
+    touchSlop: Float,
+    longPressMs: Long,
+    onCursorTap: () -> Unit,
+) {
+    val activeTouches = mutableMapOf<PointerId, ActiveTouch>()
+    val freeSlots = sortedSetOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+    fun addTouch(
+        change: PointerInputChange,
+        initialHit: SurfaceHit?,
+    ) {
+        val slot = freeSlots.firstOrNull() ?: return
+        val hit = initialHit ?: window.hitTest(change.position.x, change.position.y)
+            ?: SurfaceHit(firstHit.surface, change.position.x / firstHit.scale, change.position.y / firstHit.scale, scale = firstHit.scale)
+        freeSlots.remove(slot)
+        activeTouches[change.id] = ActiveTouch(slot, hit, change.position)
+        wm.touchDown(hit, slot)
+    }
+
+    addTouch(firstChange, firstHit)
+
+    var moved = false
+    var longPressed = false
+
+    while (activeTouches.isNotEmpty()) {
+        val next =
+            if (!moved && !longPressed && activeTouches.size == 1) {
+                withTimeoutOrNull(longPressMs) { awaitPointerEvent() }
+            } else {
+                awaitPointerEvent()
             }
-            wm.touchUp(id)
-            if (tapped && wm.onTextCursorRow(hit)) onCursorTap()
+
+        if (next == null) {
+            longPressed = true
+            if (activeTouches.size == 1) {
+                val primary = activeTouches.values.first()
+                wm.click(primary.hit, BTN_RIGHT)
+            }
             continue
         }
 
-        var scrolling = false
-        var longPressed = false
-        var last = start
-        while (true) {
-            val next =
-                if (!scrolling && !longPressed) {
-                    withTimeoutOrNull(longPressMs) { awaitPointerEvent() }
+        for (c in next.changes) {
+            val touch = activeTouches[c.id]
+            if (touch != null) {
+                c.consume()
+                if (!c.pressed) {
+                    wm.touchUp(touch.slot)
+                    freeSlots.add(touch.slot)
+                    activeTouches.remove(c.id)
                 } else {
-                    awaitPointerEvent()
+                    val dist = (c.position - touch.start).getDistance()
+                    if (dist > touchSlop) moved = true
+                    val d = (c.position - touch.start) / touch.hit.scale
+                    wm.touchMotion(touch.slot, touch.hit.x + d.x, touch.hit.y + d.y)
                 }
-            if (next == null) {
-                longPressed = true
-                wm.click(hit, BTN_RIGHT)
-                continue
+            } else if (c.pressed && !c.isConsumed) {
+                moved = true
+                c.consume()
+                addTouch(c, null)
             }
-            val c = next.changes.firstOrNull { it.id == change.id } ?: break
-            if (c.isConsumed) {
-                if (scrolling) wm.scrollStop()
-                break
-            }
-            c.consume()
-            if (!c.pressed) {
-                if (scrolling) {
-                    wm.scrollStop()
-                } else if (!longPressed) {
-                    wm.click(hit, BTN_LEFT)
-                    if (wm.onTextCursorRow(hit)) onCursorTap()
-                }
-                break
-            }
-            if (!scrolling && !longPressed && (c.position - start).getDistance() > touchSlop) {
-                scrolling = true
-                wm.pointerMove(hit)
-            }
-            if (scrolling) {
-                val d = c.position - last
-                wm.scroll(-d.x / hit.scale, -d.y / hit.scale, AXIS_SOURCE_FINGER)
-            }
-            last = c.position
         }
+    }
+
+    if (!moved && !longPressed && wm.onTextCursorRow(firstHit)) onCursorTap()
+}
+
+private suspend fun AwaitPointerEventScope.handleSingleTouchFallback(
+    wm: WindowManager,
+    window: XdgToplevel,
+    firstChange: PointerInputChange,
+    hit: SurfaceHit,
+    touchSlop: Float,
+    longPressMs: Long,
+    onCursorTap: () -> Unit,
+) {
+    val start = firstChange.position
+    var moved = false
+    var longPressed = false
+    var scrolling = false
+    var last = start
+    while (true) {
+        val next =
+            if (!moved && !longPressed && !scrolling) {
+                withTimeoutOrNull(longPressMs) { awaitPointerEvent() }
+            } else {
+                awaitPointerEvent()
+            }
+        if (next == null) {
+            longPressed = true
+            wm.click(hit, BTN_RIGHT)
+            continue
+        }
+        val c = next.changes.firstOrNull { it.id == firstChange.id } ?: break
+        if (c.isConsumed) {
+            if (scrolling) wm.scrollStop()
+            break
+        }
+        c.consume()
+        if (!c.pressed) {
+            if (scrolling) {
+                wm.scrollStop()
+            }
+            if (!moved && !longPressed) {
+                wm.click(hit, BTN_LEFT)
+            }
+            if (!moved && !longPressed && wm.onTextCursorRow(hit)) onCursorTap()
+            break
+        }
+        val dist = (c.position - start).getDistance()
+        if (dist > touchSlop) moved = true
+        if (!scrolling && !longPressed && dist > touchSlop) {
+            scrolling = true
+        }
+        if (scrolling) {
+            val step = c.position - last
+            wm.scroll(-step.x / hit.scale, -step.y / hit.scale, AXIS_SOURCE_FINGER)
+        }
+        last = c.position
     }
 }
 

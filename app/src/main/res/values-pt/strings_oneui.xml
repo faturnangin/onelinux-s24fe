@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="oneui_app_title">OneLinux</string>
+    <string name="oneui_app_subtitle">Galaxy S24 FE • Exynos 2400e (Xclipse 940)</string>
+    <string name="oneui_section_status">Aceleração de Hardware e Estado</string>
+    <string name="oneui_status_gpu">GPU: Xclipse 940 (AMD RDNA 3)</string>
+    <string name="oneui_status_driver">Driver: RADV Xclipse (Vulkan + Zink)</string>
+    <string name="oneui_status_wayland">Compositor: Wayland Integrado (Direct Surface)</string>
+    <string name="oneui_status_storage">Armazenamento Compartilhado: /sdcard (Leitura/Escrita)</string>
+    <string name="oneui_status_storage_need_perm">Armazenamento: Conceder acesso a todos os arquivos</string>
+    <string name="oneui_section_workspaces">Desktop e Espaços de Trabalho</string>
+    <string name="oneui_desktop_title">Noctalia Desktop</string>
+    <string name="oneui_desktop_desc">Desktop Wayland em mosaico com barra QuickShell e renderização Vulkan direta</string>
+    <string name="oneui_desktop_launch">Iniciar Desktop</string>
+    <string name="oneui_agy_title">Espaço de Trabalho Antigravity (agy)</string>
+    <string name="oneui_agy_desc">Agente de codificação de IA e ambiente de desenvolvimento em /sdcard/Projects</string>
+    <string name="oneui_agy_launch">Iniciar Terminal agy</string>
+    <string name="oneui_section_apps">Aplicativos Linux</string>
+    <string name="oneui_apps_empty">Nenhum aplicativo Linux detectado ainda</string>
+    <string name="oneui_section_driver">Gerenciador de Driver GPU (OTA Hot-Swap)</string>
+    <string name="oneui_driver_active">Driver Ativo: radv-xclipse</string>
+    <string name="oneui_driver_check_github">Verificar Atualizações no GitHub</string>
+    <string name="oneui_driver_import">Importar Driver (.zip/.tar.xz)</string>
+    <string name="oneui_section_storage">Pastas Compartilhadas</string>
+    <string name="oneui_folder_downloads">Downloads (/sdcard/Download)</string>
+    <string name="oneui_folder_documents">Documentos (/sdcard/Documents)</string>
+    <string name="oneui_folder_projects">Projetos (/sdcard/Projects)</string>
+    <string name="oneui_perm_grant_all_files">Conceder Acesso a Todos os Arquivos</string>
+    <string name="oneui_install_title">Ambiente Linux PRoot</string>
+    <string name="oneui_install_desc">Configurar Arch Linux ARM64 com aceleração de hardware Xclipse 940</string>
+    <string name="oneui_install_btn">Instalar Linux Agora</string>
+    <string name="oneui_installing_title">Configurando o ambiente Linux...</string>
+    <string name="oneui_installing_cancel">Cancelar</string>
+    <string name="oneui_install_failed">Falha na instalação do Linux</string>
+    <string name="oneui_install_retry">Tentar Novamente</string>
+    <string name="oneui_dialog_driver_title">Atualização do Driver RADV Xclipse</string>
+    <string name="oneui_dialog_driver_desc">Baixar versão mais recente de JimVulkan/radv-xclipse</string>
+    <string name="oneui_dialog_downloading">Baixando...</string>
+    <string name="oneui_dialog_success">Driver atualizado com sucesso!</string>
+    <string name="oneui_dialog_close">Fechar</string>
+    <string name="oneui_refresh">Atualizar</string>
+    <string name="oneui_settings">Configurações</string>
+    <string name="oneui_terminal_app">Terminal</string>
+    <string name="oneui_install_import_tarball">Importar Rootfs local (.tar.gz)</string>
+    <string name="oneui_tarball_imported">Arquivo Rootfs importado! Toque em Instalar para continuar.</string>
+</resources>

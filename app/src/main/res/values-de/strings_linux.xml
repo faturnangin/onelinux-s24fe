@@ -125,6 +125,11 @@
     <string name="linux_retry">nochmal versuchen</string>
     <string name="linux_gpu_turn_off">ausschalten</string>
     <string name="linux_gpu_turn_on">einschalten</string>
+    <string name="linux_gpu_import">treiber importieren (.zip/.so)</string>
+    <string name="linux_gpu_github">von github aktualisieren</string>
+    <string name="linux_gpu_github_title">radv-xclipse-treiber aktualisieren</string>
+    <string name="linux_gpu_github_hint">GitHub-Repository oder direkte Release-URL (.zip/.so)</string>
+    <string name="linux_gpu_custom_active">eigener treiber: %1$s</string>
 
     <string name="linux_notification_channel">Linux-Sitzung</string>
     <string name="linux_notify_channel">Agenten und Skripte</string>

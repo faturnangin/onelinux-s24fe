@@ -69,4 +69,16 @@
     <string name="drawer_action_pin">adicionar à tela inicial</string>
     <string name="drawer_action_info">informações do app</string>
     <string name="drawer_action_uninstall">desinstalar</string>
+
+    <!-- One UI 9 Folder Hub -->
+    <string name="oneui_hub_title">Apps Linux</string>
+    <string name="oneui_hub_subtitle">Galaxy S24 FE · Exynos 2400e · RADV-Xclipse</string>
+    <string name="oneui_action_desktop">Noctalia Desktop</string>
+    <string name="oneui_action_browser">Chromium WebGL</string>
+    <string name="oneui_action_agy">Antigravity CLI</string>
+    <string name="oneui_action_gpu">RADV-Xclipse GPU</string>
+    <string name="oneui_action_storage">Armazenamento: Completo</string>
+    <string name="oneui_action_storage_scoped">Armazenamento: Permitir tudo</string>
+    <string name="oneui_switch_grid">visão widgets</string>
+    <string name="oneui_switch_folder">visão pasta</string>
 </resources>

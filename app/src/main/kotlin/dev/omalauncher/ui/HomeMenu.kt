@@ -104,6 +104,10 @@ fun HomeMenu(
                 state.show()
             }
         }
+        MenuItem(stringResource(R.string.oneui_switch_folder)) {
+            state.homeMenuOpen = false
+            state.folderMode = true
+        }
         MenuItem(stringResource(R.string.home_browse_store)) {
             state.homeMenuOpen = false
             state.show(SettingsPage.Store)

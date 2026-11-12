@@ -1,24 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- An O in Hyprland's cyan-to-green border, open at the corner where a block cursor sits.
-     Master copy: art/app-icon.svg. -->
+<!-- OneLinux One UI 9 Emblem: Stylized Galaxy squircle with Linux Terminal prompt and AMD/Exynos accent -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    
+    <!-- Central Glass Card (Squircle) -->
     <path
-        android:pathData="M75,57V44a11,11 0,0 0,-11 -11H44a11,11 0,0 0,-11 11V64a11,11 0,0 0,11 11H57"
-        android:strokeWidth="6"
+        android:pathData="M42,28 h24 c7.7,0 14,6.3 14,14 v24 c0,7.7 -6.3,14 -14,14 h-24 c-7.7,0 -14,-6.3 -14,-14 v-24 c0,-7.7 6.3,-14 14,-14 z"
+        android:fillColor="#1AFFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeColor="#4DFFFFFF" />
+
+    <!-- Terminal Prompt Chevron `>` -->
+    <path
+        android:pathData="M38,47 L46,54 L38,61"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeColor="#FFFFFFFF" />
+
+    <!-- Terminal Cursor `_` with Galaxy Cyan -->
+    <path
+        android:pathData="M52,61 h14"
+        android:strokeWidth="4"
         android:strokeLineCap="round">
         <aapt:attr name="android:strokeColor">
-            <gradient android:type="linear" android:startX="30" android:startY="30" android:endX="78" android:endY="78">
-                <item android:offset="0" android:color="#FF33CCFF" />
-                <item android:offset="1" android:color="#FF00FF99" />
+            <gradient
+                android:type="linear"
+                android:startX="52"
+                android:startY="61"
+                android:endX="66"
+                android:endY="61">
+                <item android:offset="0" android:color="#FF38BDF8" />
+                <item android:offset="1" android:color="#FF818CF8" />
             </gradient>
         </aapt:attr>
     </path>
+
+    <!-- Exynos / RDNA 3 hardware acceleration spark pill -->
     <path
-        android:fillColor="#FFC0CAF5"
-        android:pathData="M67.5,65h5a2.5,2.5 0,0 1,2.5 2.5v5a2.5,2.5 0,0 1,-2.5 2.5h-5a2.5,2.5 0,0 1,-2.5 -2.5v-5a2.5,2.5 0,0 1,2.5 -2.5z" />
+        android:pathData="M64,36 h6"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFF43F5E" />
 </vector>

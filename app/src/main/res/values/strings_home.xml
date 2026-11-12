@@ -90,4 +90,16 @@
     <string name="drawer_action_pin">add to home</string>
     <string name="drawer_action_info">app info</string>
     <string name="drawer_action_uninstall">uninstall</string>
+
+    <!-- One UI 9 Folder Hub -->
+    <string name="oneui_hub_title">Linux Apps</string>
+    <string name="oneui_hub_subtitle">Galaxy S24 FE · Exynos 2400e · RADV-Xclipse</string>
+    <string name="oneui_action_desktop">Noctalia Desktop</string>
+    <string name="oneui_action_browser">Chromium WebGL</string>
+    <string name="oneui_action_agy">Antigravity CLI</string>
+    <string name="oneui_action_gpu">RADV-Xclipse GPU</string>
+    <string name="oneui_action_storage">Shared Storage: Full</string>
+    <string name="oneui_action_storage_scoped">Shared Storage: Grant All Files</string>
+    <string name="oneui_switch_grid">widgets view</string>
+    <string name="oneui_switch_folder">folder view</string>
 </resources>

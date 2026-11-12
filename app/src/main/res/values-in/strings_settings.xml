@@ -55,6 +55,8 @@
     <string name="permissions_notifications_uses">linux selama berjalan, widget yang memberi notifikasi</string>
     <string name="permissions_notification_access">akses notifikasi</string>
     <string name="permissions_notification_access_uses">titik notifikasi, yang sedang diputar dan jangan ganggu untuk widget</string>
+    <string name="permissions_all_files">akses semua file</string>
+    <string name="permissions_all_files_uses">penyimpanan bersama penuh di /sdcard, /root/Android, /root/Downloads, dan /root/Documents</string>
 
     <string name="settings_android">setelan android</string>
     <string name="settings_android_subtitle">setelan sistem ponsel</string>

@@ -65,4 +65,16 @@
     <string name="drawer_action_pin">添加到主屏幕</string>
     <string name="drawer_action_info">应用信息</string>
     <string name="drawer_action_uninstall">卸载</string>
+
+    <!-- One UI 9 Folder Hub -->
+    <string name="oneui_hub_title">Linux 应用</string>
+    <string name="oneui_hub_subtitle">Galaxy S24 FE · Exynos 2400e · RADV-Xclipse</string>
+    <string name="oneui_action_desktop">Noctalia 桌面</string>
+    <string name="oneui_action_browser">Chromium WebGL</string>
+    <string name="oneui_action_agy">Antigravity CLI</string>
+    <string name="oneui_action_gpu">RADV-Xclipse GPU</string>
+    <string name="oneui_action_storage">共享存储：完整</string>
+    <string name="oneui_action_storage_scoped">共享存储：授予所有文件</string>
+    <string name="oneui_switch_grid">小组件视图</string>
+    <string name="oneui_switch_folder">文件夹视图</string>
 </resources>

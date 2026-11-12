@@ -37,6 +37,9 @@ class LauncherState {
     /** The menu from long-pressing empty home space. */
     var homeMenuOpen by mutableStateOf(false)
 
+    /** Whether One UI 9 Folder Hub is shown instead of classic widget grid. */
+    var folderMode by mutableStateOf(true)
+
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
         get() = drawer.value > 0.99f || shared != null || sharing != null

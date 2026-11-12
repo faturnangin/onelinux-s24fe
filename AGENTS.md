@@ -74,6 +74,17 @@ change done.
 - **Fix what's asked.** Don't change behavior or add mechanisms beyond the
   task. Mention anything else you notice instead of changing it.
 
+## Rules for Linux Graphics & Hardware Acceleration (Xclipse / Wayland)
+
+- **Samsung Exynos / Xclipse GPUs:** Exynos 2200/2400/2500 (Xclipse 920/940/950) uses `/dev/dri/renderD128` (sgpu) with the `radv-xclipse` Vulkan driver (`libvulkan_radeon.so`), not Turnip or PanVK.
+- **Wayland Chromium Flags:**
+  - Never pass `--in-process-gpu` on Wayland (causes fatal crash).
+  - Never hardcode `--force-device-scale-factor` unless requested (causes letterboxing/empty borders when compositor scale != 1.0).
+  - For high-performance WebGL, use `--use-gl=angle --use-angle=vulkan`. Do not use `--use-angle=gl` (incurs heavy double-translation overhead via Zink).
+  - Do not unconditionally pass `--enable-features=Vulkan` under Wayland `wl_shm` compositors; let ANGLE handle Vulkan for WebGL specifically.
+  - When relying on Zink/GL, always export `__EGL_VENDOR_LIBRARY_FILENAMES=/usr/local/share/glvnd/egl_vendor.d/50_mesa.json`.
+- **Window Insets & Title Tracking:** Do not use `window.title.contains(...)` to toggle window insets or fullscreen status; page titles change dynamically. Use explicit app IDs or user preference toggles.
+
 ## Commits
 
 Look at `git log` and match it: one subject line, written as a sentence or

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="oneui_app_title">OneLinux</string>
+    <string name="oneui_app_subtitle">Galaxy S24 FE • Exynos 2400e (Xclipse 940)</string>
+    <string name="oneui_section_status">Status &amp; Akselerasi Grafis</string>
+    <string name="oneui_status_gpu">GPU: Xclipse 940 (AMD RDNA 3)</string>
+    <string name="oneui_status_driver">Driver: RADV Xclipse (Vulkan + Zink)</string>
+    <string name="oneui_status_wayland">Compositor: Built-in Wayland (Direct Surface)</string>
+    <string name="oneui_status_storage">Penyimpanan: /sdcard (Read/Write)</string>
+    <string name="oneui_status_storage_need_perm">Penyimpanan: Izin Semua File Diperlukan</string>
+    <string name="oneui_section_workspaces">Desktop &amp; Workspace</string>
+    <string name="oneui_desktop_title">Noctalia Desktop</string>
+    <string name="oneui_desktop_desc">Tiling Wayland desktop dengan QuickShell bar &amp; rendering Vulkan langsung</string>
+    <string name="oneui_desktop_launch">Buka Desktop</string>
+    <string name="oneui_agy_title">Antigravity Workspace (agy)</string>
+    <string name="oneui_agy_desc">Lingkungan AI Coding &amp; dev agent di /sdcard/Projects</string>
+    <string name="oneui_agy_launch">Buka Terminal agy</string>
+    <string name="oneui_section_apps">Aplikasi Linux</string>
+    <string name="oneui_apps_empty">Belum ada aplikasi Linux yang terdeteksi</string>
+    <string name="oneui_section_driver">Manajemen Driver GPU (OTA Hot-Swap)</string>
+    <string name="oneui_driver_active">Driver Aktif: radv-xclipse</string>
+    <string name="oneui_driver_check_github">Cek Update GitHub</string>
+    <string name="oneui_driver_import">Impor Driver (.zip/.tar.xz)</string>
+    <string name="oneui_section_storage">Folder Penyimpanan Bersama</string>
+    <string name="oneui_folder_downloads">Downloads (/sdcard/Download)</string>
+    <string name="oneui_folder_documents">Documents (/sdcard/Documents)</string>
+    <string name="oneui_folder_projects">Projects (/sdcard/Projects)</string>
+    <string name="oneui_perm_grant_all_files">Beri Izin Akses Semua File</string>
+    <string name="oneui_install_title">Lingkungan Linux PRoot</string>
+    <string name="oneui_install_desc">Pasang Arch Linux ARM64 dengan akselerasi GPU Xclipse 940</string>
+    <string name="oneui_install_btn">Pasang Linux Sekarang</string>
+    <string name="oneui_installing_title">Menyiapkan Lingkungan Linux...</string>
+    <string name="oneui_installing_cancel">Batal</string>
+    <string name="oneui_install_failed">Pemasangan Linux gagal</string>
+    <string name="oneui_install_retry">Coba Lagi</string>
+    <string name="oneui_dialog_driver_title">Update Driver RADV Xclipse</string>
+    <string name="oneui_dialog_driver_desc">Unduh rilis terbaru dari JimVulkan/radv-xclipse</string>
+    <string name="oneui_dialog_downloading">Mengunduh...</string>
+    <string name="oneui_dialog_success">Driver berhasil diperbarui!</string>
+    <string name="oneui_dialog_close">Tutup</string>
+    <string name="oneui_refresh">Segarkan</string>
+    <string name="oneui_settings">Pengaturan</string>
+    <string name="oneui_terminal_app">Terminal</string>
+    <string name="oneui_install_import_tarball">Pilih File Rootfs Lokal (.tar.gz)</string>
+    <string name="oneui_tarball_imported">File Rootfs berhasil diimpor! Tekan Pasang untuk melanjutkan.</string>
+</resources>

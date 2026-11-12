@@ -2,6 +2,7 @@ package dev.omalauncher.ui
 
 import android.Manifest
 import android.os.Build
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -34,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import dev.omalauncher.Runtime
 import dev.omalauncher.R
 import dev.omalauncher.linux.AGENTS
+import dev.omalauncher.linux.GpuDrivers
 import dev.omalauncher.linux.JobState
 import dev.omalauncher.linux.LinuxState
 import kotlinx.coroutines.Dispatchers
@@ -158,8 +162,25 @@ private fun Installed(runtime: Runtime) {
 /** Opt-in GPU acceleration for Linux apps; see [dev.omalauncher.linux.Gpu]. */
 @Composable
 private fun GpuRow(runtime: Runtime) {
+    val context = LocalContext.current
     val gpu = runtime.gpu
     val state = gpu.state
+    var showGithubInput by remember { mutableStateOf(false) }
+    var githubUrl by rememberSaveable { mutableStateOf(GpuDrivers.XCLIPSE_GITHUB_REPO) }
+
+    val pickDriverFile =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                val displayName =
+                    runCatching {
+                        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) cursor.getString(0) else null
+                        }
+                    }.getOrNull() ?: uri.lastPathSegment ?: "radv-xclipse.zip"
+                runtime.importGpuDriver(uri, displayName)
+            }
+        }
+
     val status =
         when {
             state is JobState.Working -> stringResource(R.string.linux_job_working, stringResource(state.action))
@@ -177,6 +198,12 @@ private fun GpuRow(runtime: Runtime) {
                     status,
                     style = Mono.copy(color = if (gpu.active) Palette.green else Palette.muted, fontSize = TextSize.Small),
                 )
+                gpu.customDriverVersion?.let { customVer ->
+                    BasicText(
+                        stringResource(R.string.linux_gpu_custom_active, customVer),
+                        style = Mono.copy(color = Palette.accent, fontSize = TextSize.Small),
+                    )
+                }
             }
             // Keys on one wait out its job, for the one it ends with.
             val passed = Modifier.takesPassedKeys().passesKeys()
@@ -187,6 +214,48 @@ private fun GpuRow(runtime: Runtime) {
                     BracketAction(stringResource(R.string.linux_gpu_turn_off), Palette.red, passed) { runtime.setGpu(false) }
                 }
                 else -> BracketAction(stringResource(R.string.linux_gpu_turn_on), Palette.accent, passed) { runtime.setGpu(true) }
+            }
+        }
+        if (gpu.isXclipse && state !is JobState.Working) {
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BracketAction(stringResource(R.string.linux_gpu_import), Palette.accent) {
+                    pickDriverFile.launch(arrayOf("*/*"))
+                }
+                BracketAction(stringResource(R.string.linux_gpu_github), Palette.accent) {
+                    showGithubInput = !showGithubInput
+                }
+            }
+            if (showGithubInput) {
+                Spacer(Modifier.height(8.dp))
+                BasicText(
+                    stringResource(R.string.linux_gpu_github_title),
+                    style = Mono.copy(color = Palette.foreground, fontSize = TextSize.Small),
+                )
+                Spacer(Modifier.height(4.dp))
+                BasicTextField(
+                    value = githubUrl,
+                    onValueChange = { githubUrl = it },
+                    singleLine = true,
+                    textStyle = Mono.copy(fontSize = TextSize.Small),
+                    cursorBrush = SolidColor(Palette.accent),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .frame(1.dp, Palette.border, Palette.background, radius = 8.dp)
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BracketAction(stringResource(R.string.settings_update), Palette.accent) {
+                        val target = githubUrl.trim().ifEmpty { GpuDrivers.XCLIPSE_GITHUB_REPO }
+                        showGithubInput = false
+                        runtime.downloadGpuDriver(target)
+                    }
+                    BracketAction(stringResource(R.string.linux_cancel), Palette.muted) {
+                        showGithubInput = false
+                    }
+                }
             }
         }
         JobLog(state)

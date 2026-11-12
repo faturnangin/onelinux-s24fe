@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.omalauncher.LocalNetwork
+import dev.omalauncher.PhoneStorage
 import dev.omalauncher.R
 import dev.omalauncher.Runtime
 import dev.omalauncher.hasPermission
@@ -84,6 +85,18 @@ fun PermissionsScreen(
         val notifications = context.getSystemService(NotificationManager::class.java)
         val rows =
             listOfNotNull(
+                if (PhoneStorage.supported()) {
+                    val manageFiles: () -> Unit = { runCatching { context.startActivity(PhoneStorage.manageAllFilesIntent(context)) } }
+                    Permission(
+                        R.string.permissions_all_files,
+                        stringResource(R.string.permissions_all_files_uses),
+                        PhoneStorage.hasAllFilesAccess(),
+                        manageFiles,
+                        manageFiles,
+                    )
+                } else {
+                    null
+                },
                 Permission(
                     R.string.permissions_mic,
                     stringResource(R.string.permissions_mic_uses),

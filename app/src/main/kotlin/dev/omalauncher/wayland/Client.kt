@@ -271,6 +271,8 @@ class Client(
             return
         }
         try {
+            if (obj.iface.contains("xdg") || obj.iface.contains("surface")) {
+            }
             obj.request(opcode, args)
         } catch (e: Exception) {
             Log.w(TAG, "error handling ${obj.iface}#$opcode", e)

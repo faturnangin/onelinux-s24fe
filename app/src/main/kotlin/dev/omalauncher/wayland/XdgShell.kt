@@ -140,7 +140,8 @@ class XdgSurface(
                 val newId = args.newId()
                 val parent = client.get<XdgSurface>(args.obj())
                 val positioner = client.get<XdgPositioner>(args.obj()) ?: return
-                popup = client.register(XdgPopup(client, newId, version, this, parent, positioner.position()))
+                val pos = positioner.position()
+                popup = client.register(XdgPopup(client, newId, version, this, parent, pos))
             }
             3 -> pendingGeometry = Geometry(args.int(), args.int(), args.int(), args.int())
             4 -> Unit // ack_configure
@@ -154,13 +155,17 @@ class XdgSurface(
         if (!initialCommitDone) {
             initialCommitDone = true
             toplevel?.let { client.server.windowManager.toplevelCreated(it) }
-            popup?.configure()
+            popup?.let {
+                it.configure()
+            }
             return
         }
         val hasContent = surface.hasContent
         if (hasContent && !mapped) {
             mapped = true
-            popup?.let { client.server.popups += it }
+            popup?.let {
+                client.server.popups += it
+            }
         } else if (!hasContent && mapped) {
             // Unmapped by attaching a null buffer; the client must start over.
             mapped = false
@@ -168,7 +173,9 @@ class XdgSurface(
             // It waits for a configure before mapping again, even one with the same size.
             toplevel?.forgetConfigure()
             toplevel?.let { client.server.windowManager.toplevelDestroyed(it) }
-            popup?.let { client.server.popups -= it }
+            popup?.let {
+                client.server.popups -= it
+            }
         }
     }
 
@@ -226,8 +233,8 @@ class XdgToplevel(
         val states =
             buildList {
                 if (active) add(4) // activated
+                add(1) // maximized
                 if (version >= 2) addAll(listOf(5, 6, 7, 8)) // tiled on all edges
-                else add(1) // maximized: best "don't draw shadows" hint for v1 clients
             }
         send(event(0).int(width).int(height).ints(states.toIntArray()))
         xdg.sendConfigure()
