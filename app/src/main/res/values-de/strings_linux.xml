@@ -130,6 +130,9 @@
     <string name="linux_gpu_github_title">radv-xclipse-treiber aktualisieren</string>
     <string name="linux_gpu_github_hint">GitHub-Repository oder direkte Release-URL (.zip/.so)</string>
     <string name="linux_gpu_custom_active">eigener treiber: %1$s</string>
+    <string name="linux_cpu_pinning_title">schnelle systemaufrufe</string>
+    <string name="linux_cpu_pinning_on">an · hält linux auf einem schnellen cpu-kern · für ab jetzt gestartete programme</string>
+    <string name="linux_cpu_pinning_off">aus · für ab jetzt gestartete programme</string>
 
     <string name="linux_notification_channel">Linux-Sitzung</string>
     <string name="linux_notify_channel">Agenten und Skripte</string>

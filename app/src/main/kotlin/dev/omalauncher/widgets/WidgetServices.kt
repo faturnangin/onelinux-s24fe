@@ -91,6 +91,7 @@ import dev.omalauncher.widgets.runtime.AirPods
 import dev.omalauncher.widgets.runtime.Alarm
 import dev.omalauncher.widgets.runtime.Media
 import dev.omalauncher.widgets.runtime.Modes
+import dev.omalauncher.widgets.runtime.Motion
 import dev.omalauncher.widgets.runtime.Notifications
 import dev.omalauncher.widgets.runtime.Services
 import dev.omalauncher.widgets.runtime.Sim
@@ -179,6 +180,7 @@ class WidgetServices(
     private val alarm = Alarm(context)
     private val modes = Modes(context)
     private val sim = Sim(context)
+    private val motion = Motion(context)
     /** android.airpods and airpods(...); each activity that shows widgets lets it ask for Bluetooth while it's in front. */
     val airpods = AirPods(context, scope)
     private val panels = SystemPanels(context)
@@ -250,6 +252,7 @@ class WidgetServices(
             "alarm" -> alarm.updates()
             "modes" -> modes.updates()
             "sim" -> sim.updates()
+            "motion" -> motion.updates()
             "location" -> runtime.location.updates()
             "calendar" -> runtime.calendar.updates()
             "airpods" -> airpods.updates()
@@ -623,8 +626,8 @@ class WidgetServices(
         if (name == "run") return run(arg) { done() }
         // Keys go out as they're pressed, many a second while one repeats: nothing to refresh after them.
         when (name) {
-            "pressKey" -> return KeyNames.combo(arg)?.let(runtime.keyboard::press) ?: Unit
-            "typeText" -> return runtime.keyboard.type(arg)
+            "pressKey" -> return KeyNames.combo(arg)?.let { runtime.keyboard.flush(); runtime.keyboard.press(it) } ?: Unit
+            "typeText" -> return runtime.keyboard.run { flush(); type(arg) }
             "latch" -> return runtime.keyboard.latch(arg, args.getOrNull(1).textOrNull())
             "pickImages" -> return runtime.keyboard.pickImages()
             // Nothing to refresh: the source follows the grant itself.

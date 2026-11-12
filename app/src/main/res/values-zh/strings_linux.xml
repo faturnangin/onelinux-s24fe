@@ -128,6 +128,9 @@
     <string name="linux_gpu_github_title">更新 radv-xclipse 驱动</string>
     <string name="linux_gpu_github_hint">GitHub 仓库或直链发布包地址 (.zip/.so)</string>
     <string name="linux_gpu_custom_active">自定义驱动：%1$s</string>
+    <string name="linux_cpu_pinning_title">快速系统调用</string>
+    <string name="linux_cpu_pinning_on">已开启 · 让 Linux 运行在一个高性能 CPU 核心上 · 对之后启动的程序生效</string>
+    <string name="linux_cpu_pinning_off">已关闭 · 对之后启动的程序生效</string>
 
     <string name="linux_notification_channel">Linux 会话</string>
     <string name="linux_notify_channel">智能体和脚本</string>

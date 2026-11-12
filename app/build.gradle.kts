@@ -21,8 +21,8 @@ android {
         applicationId = "dev.onelinux"
         minSdk = 29
         targetSdk = 37
-        versionCode = 33
-        versionName = "1.0.0"
+        versionCode = 36
+        versionName = "1.3.0"
         ndk { abiFilters += "arm64-v8a" }
     }
 

@@ -1,11 +1,16 @@
 package dev.omalauncher.linux
 
 import android.content.Context
+import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import dev.omalauncher.LauncherData
 import dev.omalauncher.PhoneStorage
 import dev.omalauncher.upgrade.Managed
 import dev.omalauncher.upgrade.Policy
 import java.io.File
+import kotlin.concurrent.thread
 
 /** Paths and process launching for the proot'd Arch rootfs. */
 class Proot(
@@ -37,6 +42,20 @@ class Proot(
 
     /** How guest apps render OpenGL and Vulkan: in software, or on the GPU once [Gpu] turns it on. */
     @Volatile var graphicsEnv: List<String> = SOFTWARE_ENV
+
+    private val prefs = LauncherData.prefs(context)
+
+    /**
+     * proot keeping itself and programs making many syscalls on one fast CPU (patches/proot/0002): Linux runs
+     * several times faster. On unless the user turned it off; applies to what starts after a change.
+     */
+    var cpuPinning by mutableStateOf(prefs.getBoolean(CPU_PINNING, true))
+        private set
+
+    fun changeCpuPinning(on: Boolean) {
+        cpuPinning = on
+        prefs.edit().putBoolean(CPU_PINNING, on).apply()
+    }
 
     /** Launcher data the guest sees in its home, kept outside the rootfs; see [LauncherData]. */
     private val dataBinds =
@@ -117,9 +136,10 @@ class Proot(
      * stand-ins every guest command needs. Call once, before any guest runs.
      */
     fun prepare() {
+        discardTmp()
+        LauncherData.deleteTree(runtimeDir)
+        runtimeDir.mkdirs()
         for (dir in listOf(tmpDir, runtimeDir)) {
-            LauncherData.deleteTree(dir)
-            dir.mkdirs()
             runCatching { android.system.Os.chmod(dir.path, 0b111_000_000) }
         }
         // proot skips a bind whose host directory is missing, and the guest would then write into the rootfs.
@@ -172,6 +192,23 @@ class Proot(
         File(rootfs, "usr/bin/bwrap").takeIf { it.isFile && it.length() == 0L }?.delete()
         File(filesDir, "bwrap-shim").delete()
         File(applications, "noctalia-desktop.desktop").delete()
+    }
+
+    /** Old /tmp contents waiting to be deleted; see [discardTmp]. */
+    private val discardedTmp = File(filesDir, "tmp-discarded")
+
+    /**
+     * Starts the guest with an empty /tmp. A day of agent work can leave hundreds of thousands of files there (a
+     * cloned repo with node_modules), and deleting them takes long enough on a phone that Linux looked uninstalled
+     * meanwhile. So the old one moves aside and is deleted in the background, along with any a killed process left.
+     */
+    private fun discardTmp() {
+        discardedTmp.mkdirs()
+        if (tmpDir.exists() && !tmpDir.renameTo(File(discardedTmp, System.nanoTime().toString()))) LauncherData.deleteTree(tmpDir)
+        tmpDir.mkdirs()
+        thread(name = "tmp-discard", isDaemon = true) {
+            runCatching { LauncherData.deleteTree(discardedTmp) }.onFailure { Log.w("proot", "old /tmp", it) }
+        }
     }
 
     /**
@@ -499,11 +536,14 @@ class Proot(
                 put("PROOT_LOADER", File(nativeDir, "libproot-loader.so").path)
                 put("PROOT_TMP_DIR", tmpDir.path)
                 put("LD_LIBRARY_PATH", nativeDir.path)
+                if (!cpuPinning) put("PROOT_HOME_CPU", "off")
             }
             redirectErrorStream(true)
         }
 
     companion object {
+        private const val CPU_PINNING = "proot_cpu_pinning"
+
         const val GUEST_HOME = "/root"
 
         /** XDG_RUNTIME_DIR in the guest, bound to [runtimeDir]. */

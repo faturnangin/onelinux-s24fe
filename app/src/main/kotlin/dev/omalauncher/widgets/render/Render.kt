@@ -84,6 +84,7 @@ import dev.omalauncher.widgets.runtime.PicturePainter
 import dev.omalauncher.widgets.runtime.WidgetImage
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
@@ -303,9 +304,11 @@ private fun FrameClock(
         // When the next tick is due. A frame up to a quarter of a tick early takes it, so a 60 Hz screen ticks on each
         // frame, 90 Hz on two in three and 120 Hz on every other one.
         var due = start
+        var last = start
         while (true) {
             if (covered()) snapshotFlow { covered() }.first { !it }
-            if (unread >= 3) {
+            // An `every frame` widget moves things each frame, whether or not anything reads `time`.
+            if (unread >= 3 && !inst.runsEachFrame) {
                 inst.awaitTimeRead(start)
                 unread = 0
             }
@@ -320,6 +323,8 @@ private fun FrameClock(
                 unread = if (inst.timeRead) 0 else unread + 1
                 inst.timeRead = false
                 inst.time = (now - start) / 1e9
+                inst.frame((now - last) / 1e9)
+                last = now
             }
         }
     }
@@ -995,6 +1000,39 @@ private fun handlers(
                     "horizontal" -> detectHorizontalDragGestures(start, { ended(false) }, { ended(true) }) { change, dx -> move(change, dx, 0f) }
                     "vertical" -> detectVerticalDragGestures(start, { ended(false) }, { ended(true) }) { change, dy -> move(change, 0f, dy) }
                     else -> detectDragGestures(start, { ended(false) }, { ended(true) }) { change, drag -> move(change, drag.x, drag.y) }
+                }
+            }
+    }
+    // Every finger at once, for a game's two thumbs (owl 22): the list of those down, on each change.
+    el.handlers["onTouch"]?.let { a ->
+        m =
+            m.pointerInput(el, p.env) {
+                val starts = HashMap<Long, Offset>()
+                fun dp(v: Float) = Num((v / density).toDouble())
+                try {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val had = starts.isNotEmpty()
+                            val touches = ArrayList<Value>(event.changes.size)
+                            for (c in event.changes) {
+                                if (!c.pressed) {
+                                    starts.remove(c.id.value)
+                                    continue
+                                }
+                                val start = starts.getOrPut(c.id.value) { c.position }
+                                // Its moves are the game's: nothing around it scrolls or swipes with them.
+                                if (c.positionChanged()) c.consume()
+                                touches += Obj(mapOf("id" to Num(c.id.value.toDouble()), "x" to dp(c.position.x), "y" to dp(c.position.y), "startX" to dp(start.x), "startY" to dp(start.y)))
+                            }
+                            // A mouse moving over it with no button down changes nothing.
+                            if (touches.isEmpty() && !had) continue
+                            a.run(p.env, listOf(Lst(touches)))
+                        }
+                    }
+                } finally {
+                    // Gone while fingers were down: none are, any more.
+                    if (starts.isNotEmpty()) a.run(p.env, listOf(Lst(emptyList())))
                 }
             }
     }
