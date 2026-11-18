@@ -33,11 +33,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.omalauncher.PhoneStorage
+import dev.omalauncher.storage.PhoneStorage
 import dev.omalauncher.R
 import dev.omalauncher.Runtime
 import dev.omalauncher.linux.AGENTS
 import dev.omalauncher.linux.LinuxApp
+import dev.omalauncher.ui.home.LauncherState
+import dev.omalauncher.ui.settings.SettingsPage
 
 /**
  * Samsung One UI 9 style Folder Hub for Linux Apps on Galaxy S24 FE (Exynos 2400e).

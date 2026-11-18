@@ -60,7 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.omalauncher.PhoneStorage
+import dev.omalauncher.storage.PhoneStorage
 import dev.omalauncher.R
 import dev.omalauncher.Runtime
 import dev.omalauncher.linux.AGENTS
@@ -404,6 +404,11 @@ fun OneUiMainScreen(
                 OneUiTab.ENV -> {
                     item {
                         OneUiLinuxManagerCard(
+                            linuxRunning = runtime.linuxRunning,
+                            linuxStopped = runtime.linuxStopped,
+                            onToggleLinux = {
+                                if (runtime.linuxStopped) runtime.startLinux() else runtime.stopLinux()
+                            },
                             onCheckEnv = {
                                 runGuestTask("Dev Environment Status", DEV_DIAGNOSTIC_SCRIPT)
                             },
@@ -534,6 +539,16 @@ private fun OneUiStatusCard(runtime: Runtime) {
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OneUiStatusRow(
+                label =
+                    when {
+                        runtime.linuxStopped -> "Linux Session: Stopped"
+                        runtime.linuxRunning -> "Linux Session: Running"
+                        else -> "Linux Session: Starting…"
+                    },
+                accentColor = if (runtime.linuxStopped) OneUiRose else OneUiGreen,
+                active = runtime.linuxRunning || runtime.linuxStopped,
+            )
+            OneUiStatusRow(
                 label = stringResource(R.string.oneui_status_gpu),
                 accentColor = OneUiGreen,
                 active = runtime.gpu.active,
@@ -552,6 +567,18 @@ private fun OneUiStatusCard(runtime: Runtime) {
                 label = stringResource(if (hasStorage) R.string.oneui_status_storage else R.string.oneui_status_storage_need_perm),
                 accentColor = if (hasStorage) OneUiGreen else OneUiAmber,
                 active = hasStorage,
+            )
+        }
+
+        if (runtime.linuxStopped || runtime.linuxRunning) {
+            Spacer(Modifier.height(12.dp))
+            OneUiBorderButton(
+                label = if (runtime.linuxStopped) "Start Linux" else "Stop Linux",
+                color = if (runtime.linuxStopped) OneUiGreen else OneUiRose,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    if (runtime.linuxStopped) runtime.startLinux() else runtime.stopLinux()
+                },
             )
         }
     }
@@ -714,6 +741,9 @@ private fun OneUiGridAppItem(
 
 @Composable
 private fun OneUiLinuxManagerCard(
+    linuxRunning: Boolean,
+    linuxStopped: Boolean,
+    onToggleLinux: () -> Unit,
     onCheckEnv: () -> Unit,
     onInstallDevSdk: () -> Unit,
     onUpdateSystem: () -> Unit,
@@ -739,9 +769,21 @@ private fun OneUiLinuxManagerCard(
                 ),
         )
         Spacer(Modifier.height(4.dp))
+        val sessionText =
+            when {
+                linuxStopped -> "Stopped · nothing runs and nothing is deleted"
+                linuxRunning -> "Running · ${stringResource(R.string.oneui_linux_status_healthy)}"
+                else -> "Starting Linux session…"
+            }
+        val sessionColor =
+            when {
+                linuxStopped -> OneUiRose
+                linuxRunning -> OneUiLightBlue
+                else -> OneUiAmber
+            }
         BasicText(
-            stringResource(R.string.oneui_linux_status_healthy),
-            style = Mono.copy(fontFamily = FontFamily.Default, fontSize = 13.sp, color = OneUiLightBlue),
+            sessionText,
+            style = Mono.copy(fontFamily = FontFamily.Default, fontSize = 13.sp, color = sessionColor),
         )
         Spacer(Modifier.height(10.dp))
 
@@ -792,6 +834,16 @@ private fun OneUiLinuxManagerCard(
                 color = OneUiRose,
                 modifier = Modifier.weight(1f),
                 onClick = onReinstall,
+            )
+        }
+
+        if (linuxStopped || linuxRunning) {
+            Spacer(Modifier.height(10.dp))
+            OneUiBorderButton(
+                label = if (linuxStopped) "Start Linux Service" else "Stop Linux Service",
+                color = if (linuxStopped) OneUiGreen else OneUiAmber,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onToggleLinux,
             )
         }
     }

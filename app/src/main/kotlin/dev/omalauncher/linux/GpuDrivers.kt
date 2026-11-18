@@ -1,6 +1,6 @@
 package dev.omalauncher.linux
 
-import dev.omalauncher.readUpTo
+import dev.omalauncher.system.readUpTo
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -290,9 +290,15 @@ internal object GpuDrivers {
             "export $key=${shellQuote(value)};"
         }
         val failure = shellQuote("Vulkan: the ${driver.label} driver did not load")
+        val checkId =
+            if (driver.kind == GpuKind.XCLIPSE) {
+                "grep -qiE 'DRIVER_ID_MESA_RADV|Xclipse|Radeon'"
+            } else {
+                "grep -q ${shellQuote(driver.probeId)}"
+            }
         return "{ unset LIBGL_ALWAYS_SOFTWARE VK_ICD_FILENAMES VK_DRIVER_FILES; " + exports +
             " vk=\$(timeout 60 vulkaninfo --summary 2>/dev/null); echo \"\$vk\" | grep -E 'deviceName|driverID';" +
-            " { echo \"\$vk\" | grep -qiE 'DRIVER_ID_MESA_RADV|DRIVER_ID_MESA_PANVK|DRIVER_ID_MESA_TURNIP|Xclipse|Radeon' || { echo $failure; false; }; } &&" +
+            " { echo \"\$vk\" | $checkId || { echo $failure; false; }; } &&" +
             " { timeout 60 eglinfo -B -p surfaceless 2>/dev/null | grep 'renderer: zink' || echo 'OpenGL: zink offscreen optional, Vulkan active'; true; }; }"
     }
 
